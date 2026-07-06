@@ -1,0 +1,54 @@
+[
+ {
+  "id": "fire-i5-open",
+  "scenario": "fire-day",
+  "tool": "get_lane_closures",
+  "model": "claude-haiku-4-5",
+  "passed": false,
+  "facts_ok": true,
+  "fact_failures": [],
+  "judge_correct": false,
+  "quality": 1,
+  "failure_category": "other",
+  "judge_note": "judge output unparseable",
+  "tools_called": [
+   "check_route",
+   "check_route"
+  ],
+  "answer": "Perfect! I can check that for you using the exact corridor.\n**I-5 is NOT open between LA and the Central Valley right now.** There is a **full closure at the Grapevine (near Lebec)** due to emergency work related to the VULCAN wildfire. The wildfire has burned 48,213 acres and is only 15% contained.\n\n**Summary:**\n- **Full closure** on I-5 North at Grapevine\n- VULCAN wildfire (48,213 acres, 15% contained) in the area\n- 2 additional incidents reported near Fort Tejon\n\nData as of July 6, 2026, 5:36 AM. Note: Some Caltrans lane closure feeds are temporarily unavailable, but this full closure is confirmed.\n\n**Verify before you drive: 511 or quickmap.dot.ca.gov.**"
+ },
+ {
+  "id": "quiet-chains-us50",
+  "scenario": "quiet-day",
+  "tool": "get_chain_controls",
+  "model": "claude-haiku-4-5",
+  "passed": true,
+  "facts_ok": true,
+  "fact_failures": [],
+  "judge_correct": true,
+  "quality": 5,
+  "failure_category": "none",
+  "judge_note": "Correctly states no chain controls are active, matching ground truth.",
+  "tools_called": [
+   "get_chain_controls"
+  ],
+  "answer": "**No chains required on US-50 right now.** There are no active chain-control orders in place.\n\n*Data as of 2026-07-06 at 05:36 UTC*\n\nVerify before you drive: 511 or quickmap.dot.ca.gov."
+ },
+ {
+  "id": "storm-chains-us50",
+  "scenario": "storm-day",
+  "tool": "get_chain_controls",
+  "model": "claude-haiku-4-5",
+  "passed": true,
+  "facts_ok": true,
+  "fact_failures": [],
+  "judge_correct": true,
+  "quality": 5,
+  "failure_category": "none",
+  "judge_note": "Correctly conveys R-2 at Twin Bridges/Meyers and R-1 at Pollock Pines with accurate details.",
+  "tools_called": [
+   "get_chain_controls"
+  ],
+  "answer": "**Yes, chains are required on US-50 right now** \u2013 multiple locations:\n\n- **Pollock Pines (eastbound)**: R-1 level \u2013 Chains or snow tires with M+S rating required\n- **Twin Bridges (eastbound)**: R-2 level \u2013 Chains required on all vehicles except 4WD with snow tires on all four wheels\n- **Meyers (westbound)**: R-2 level \u2013 Chains required on all vehicles except 4WD with snow tires on all four wheels\n\nData as of July 6, 2026, 5:36 AM. This is current real-time chain control status.\n\n**Verify before you drive: 511 or quickmap.dot.ca.gov.**"
+ }
+]
