@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+
+# Private planning docs - never commit anything in this directory
+docs-private/
+
+# Secrets and local environment
+.env
+.env.*
+*.local.json
+credentials*.json
+service-account*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
