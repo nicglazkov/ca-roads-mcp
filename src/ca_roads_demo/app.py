@@ -553,7 +553,11 @@ app = Starlette(
     ]
 )
 # Request-level limiter on top of the daily caps (burst 5, ~6/min sustained).
-app = RateLimitMiddleware(app, RateLimiter(capacity=5, refill_per_second=0.1))
+app = RateLimitMiddleware(
+    app,
+    RateLimiter(capacity=5, refill_per_second=0.1),
+    exempt_prefixes=("/static/", "/logo.svg", "/health", "/favicon"),
+)
 
 
 def main() -> None:
