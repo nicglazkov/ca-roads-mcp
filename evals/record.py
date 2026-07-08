@@ -23,7 +23,7 @@ from pathlib import Path
 
 import httpx
 
-from ca_roads.feeds import chains, chp, lcs, wildfire
+from ca_roads.feeds import chains, chp, lcs, portal, wildfire
 from ca_roads.geo import ALL_DISTRICTS
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -34,6 +34,9 @@ def feed_urls() -> dict[str, str]:
     for d in ALL_DISTRICTS:
         urls[f"lcs_d{d:02d}.xml"] = lcs.feed_url(d)
         urls[f"cc_d{d:02d}.xml"] = chains.feed_url(d)
+        urls[f"cms_d{d:02d}.json"] = portal.feed_url("cms", d)
+        urls[f"cctv_d{d:02d}.json"] = portal.feed_url("cctv", d)
+        urls[f"rwis_d{d:02d}.json"] = portal.feed_url("rwis", d)
     wfigs = httpx.URL(wildfire.QUERY_URL, params=wildfire.QUERY_PARAMS)
     urls["wfigs.json"] = str(wfigs)
     return urls

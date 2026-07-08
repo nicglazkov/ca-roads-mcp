@@ -199,6 +199,11 @@
     border: 1px solid var(--line); border-radius: 9px; background: none;
   }
   .clarify .optbtn:hover { border-color: var(--pine); background: rgba(28,58,46,0.05); }
+  .cam-icon {
+    color: #1c3a2e; font-size: 18px; line-height: 20px; text-align: center;
+    text-shadow: 0 0 3px #fffdf7, 0 0 3px #fffdf7;
+  }
+  .campopup img { border-radius: 8px; margin-top: 6px; display: block; }
   .more-btn:hover { background: #ebe4d2; }
   .more-rule {
     border: 0; border-top: 1px solid var(--line); margin: 18px 0 4px;
@@ -330,6 +335,8 @@
         <span style="--dot:#c9611a">incident</span>
         <span style="--dot:#2b6cb0">chain control</span>
         <span style="--dot:#d97706">wildfire</span>
+        <span style="--dot:#1c3a2e">camera</span>
+        <span style="--dot:#6b5b1e">sign</span>
         <span style="--dot:#1c3a2e">route</span>
       </div>
     </div>
@@ -367,6 +374,8 @@ const KIND_COLORS = {
   ramp_closure: '#d9a0a0',
   chain_control: '#2b6cb0',
   wildfire: '#d97706',
+  camera: '#1c3a2e',
+  sign: '#6b5b1e',
 };
 // Marker style per closure_class: severity should be readable at a glance.
 const CLOSURE_STYLES = {
@@ -495,6 +504,8 @@ const KIND_LABELS = {
   ramp_closure: ['ramp closed', 'ramps closed'],
   chain_control: ['chain control', 'chain controls'],
   wildfire: ['wildfire', 'wildfires'],
+  camera: ['live camera', 'live cameras'],
+  sign: ['sign message', 'sign messages'],
 };
 let chipCounts = {};
 
@@ -649,6 +660,27 @@ function drawGeo(geo) {
     }
   }
   for (const m of geo.markers || []) {
+    if (m.kind === 'camera') {
+      chipCounts.camera = (chipCounts.camera || 0) + 1;
+      const cam = L.marker([m.lat, m.lon], {
+        icon: L.divIcon({ className: 'cam-icon', html: '&#9635;', iconSize: [20, 20] }),
+        zIndexOffset: 300,
+      }).addTo(layerPrimary);
+      const safeName = String(m.label || 'camera').replace(/[<>&"]/g, '');
+      if (m.image) {
+        cam.bindPopup(
+          '<div class="campopup"><b>' + safeName + '</b><br>' +
+          '<img src="' + encodeURI(m.image) + '?t=' + Date.now() +
+          '" alt="' + safeName + '" width="300" ' +
+          'onerror="this.closest(\'.campopup\').innerHTML=\'' + safeName +
+          ' - snapshot unavailable\'">' + '</div>',
+          { maxWidth: 320 }
+        );
+      } else {
+        cam.bindPopup(safeName);
+      }
+      continue;
+    }
     const target = m.kind === 'wildfire' ? layerFires : layerPrimary;
     let style = {
       radius: 7, color: '#fffdf7', weight: 1.5,
