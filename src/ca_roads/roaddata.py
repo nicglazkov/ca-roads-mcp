@@ -14,6 +14,7 @@ import httpx
 from ca_roads.feeds import chains as chains_feed
 from ca_roads.feeds import chp as chp_feed
 from ca_roads.feeds import lcs as lcs_feed
+from ca_roads.feeds import portal as portal_feed
 from ca_roads.feeds import wildfire as wildfire_feed
 from ca_roads.models import FeedResult
 
@@ -26,6 +27,12 @@ class RoadData:
         self.lcs = lcs_feed.LcsSource(self._client)
         self.chains = chains_feed.ChainSource(self._client)
         self.wildfires_source = wildfire_feed.WildfireSource(self._client)
+        self.cms = portal_feed.PortalSource(
+            self._client, "cms", portal_feed.parse_cms, "cms")
+        self.cctv = portal_feed.PortalSource(
+            self._client, "cctv", portal_feed.parse_cctv, "cctv")
+        self.rwis = portal_feed.PortalSource(
+            self._client, "rwis", portal_feed.parse_rwis, "rwis")
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -63,6 +70,24 @@ class RoadData:
         if active_only:
             result.records = [c for c in result.records if chains_feed.is_active(c)]
         return result
+
+    async def message_signs(
+        self, districts: tuple[int, ...] | list[int] | None = None
+    ) -> FeedResult:
+        """CMS signs currently displaying a message (blank signs filtered)."""
+        return await self.cms.get(districts)
+
+    async def cameras(
+        self, districts: tuple[int, ...] | list[int] | None = None
+    ) -> FeedResult:
+        """In-service roadside cameras with snapshot URLs."""
+        return await self.cctv.get(districts)
+
+    async def road_weather(
+        self, districts: tuple[int, ...] | list[int] | None = None
+    ) -> FeedResult:
+        """Road-weather station observations (RWIS)."""
+        return await self.rwis.get(districts)
 
     async def wildfires(self) -> FeedResult:
         """Active California wildfires (5-minute cache)."""

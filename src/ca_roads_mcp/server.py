@@ -25,9 +25,11 @@ from ca_roads_mcp import regions as reg
 from ca_roads_mcp.geocode import geocode, geocode_candidates
 from ca_roads_mcp.routes import matches_route, normalize_route
 from ca_roads_mcp.serialize import (
+    camera_dict,
     chain_control_dict,
     closure_dict,
     incident_dict,
+    sign_dict,
     source_status,
     wildfire_dict,
 )
@@ -713,6 +715,141 @@ async def get_wildfires(
         "count": len(fires),
         "filters": {"near_route": canonical, "center": center},
         "wildfires": fires,
+        "sources": [source_status(result)],
+    }
+
+
+
+async def _live_cameras(candidates, limit: int):
+    """Keep only cameras whose image is actually live.
+
+    The feed's in-service flag is not enough: plenty of "in service"
+    cameras return a placeholder frame with some variant of "camera
+    offline" burned in. Real roadside JPEGs run tens of KB; placeholders
+    compress to a few. Fetch each candidate and keep real images only.
+    """
+    client = get_road().client
+    sem = asyncio.Semaphore(6)
+
+    async def check(cam):
+        async with sem:
+            try:
+                resp = await client.get(
+                    cam.image_url,
+                    timeout=8,
+                    headers={"User-Agent": "ca-roads-mcp"},
+                )
+            except Exception:  # noqa: BLE001 - unreachable image = offline
+                return None
+        content_type = resp.headers.get("content-type", "")
+        if (
+            resp.status_code == 200
+            and content_type.startswith("image")
+            and len(resp.content) >= 12_000
+        ):
+            return cam
+        return None
+
+    checked = await asyncio.gather(*(check(c) for c in candidates[: limit * 3]))
+    live = [c for c in checked if c is not None][:limit]
+    dropped = sum(1 for c in checked if c is None)
+    return live, dropped
+
+
+@mcp.tool()
+async def get_cameras(
+    center: str | None = None,
+    route: str | None = None,
+    radius_km: float = 30,
+    limit: int = 6,
+) -> dict:
+    """Live Caltrans roadside camera snapshots near a point or on a route.
+
+    Data: ~3,000 in-service Caltrans cameras statewide. Every returned
+    image_url was verified live moments ago (offline cameras that serve a
+    placeholder frame are filtered out), so images can be shown directly.
+    Snapshots refresh roughly every minute; stream_url (when present) is
+    an HLS video stream.
+
+    Filters: center "lat,lon" (required unless route is given) with
+    radius_km; route (e.g. "I-80", "50") narrows to that highway. Results
+    sort nearest-first when a center is given. Use a camera to let the
+    user SEE conditions: fog on the pass, snow on the pavement, traffic
+    density at an interchange.
+    """
+    if not center and not route:
+        return {"error": "Pass center 'lat,lon' and/or route."}
+    result = await get_road().cameras()
+    records = result.records
+    canonical = normalize_route(route) if route else None
+    if canonical:
+        records = [c for c in records if normalize_route(c.route) == canonical]
+    point = None
+    if center:
+        point = parse_center(center)
+        if point is None:
+            return {"error": CENTER_FORMAT_ERROR}
+        records = [
+            c for c in records
+            if c.lat and c.lon
+            and haversine_meters(*point, c.lat, c.lon) <= radius_km * 1000
+        ]
+        records.sort(key=lambda c: haversine_meters(*point, c.lat, c.lon))
+    live, dropped = await _live_cameras(records, max(1, min(limit, 10)))
+    notes = list(result.notes)
+    if dropped:
+        notes.append(
+            f"{dropped} nearby camera(s) were offline or serving a "
+            "placeholder image and were filtered out"
+        )
+    return {
+        "data_as_of": result.data_as_of.isoformat() if result.data_as_of else None,
+        "count": len(live),
+        "filters": {"center": center, "route": route, "radius_km": radius_km},
+        "cameras": [camera_dict(c) for c in live],
+        "notes": notes,
+        "sources": [source_status(result)],
+    }
+
+
+@mcp.tool()
+async def get_road_signs(
+    route: str | None = None,
+    center: str | None = None,
+    radius_km: float = 80,
+) -> dict:
+    """What Caltrans changeable message signs are displaying right now.
+
+    Data: statewide CMS sign text, blank and out-of-service signs already
+    filtered - every record is a message a driver is physically seeing.
+    Signs carry the road's operational truth ("CHAINS REQUIRED 10 MI
+    AHEAD", "FULL CLOSURE HWY 96 DUE TO FIRE", "PREPARE TO STOP"), often
+    before the event shows up in any other feed. Refresh: ~2-minute cache.
+
+    Filters: route (e.g. "I-80") and/or center "lat,lon" with radius_km.
+    Quote sign text verbatim to the user - it is the most current and
+    most local signal this server has.
+    """
+    result = await get_road().message_signs()
+    records = result.records
+    canonical = normalize_route(route) if route else None
+    if canonical:
+        records = [s for s in records if normalize_route(s.route) == canonical]
+    if center:
+        point = parse_center(center)
+        if point is None:
+            return {"error": CENTER_FORMAT_ERROR}
+        records = [
+            s for s in records
+            if s.lat and s.lon
+            and haversine_meters(*point, s.lat, s.lon) <= radius_km * 1000
+        ]
+        records.sort(key=lambda s: haversine_meters(*point, s.lat, s.lon))
+    return {
+        "data_as_of": result.data_as_of.isoformat() if result.data_as_of else None,
+        "count": len(records[:25]),
+        "filters": {"route": route, "center": center, "radius_km": radius_km},
+        "signs": [sign_dict(s) for s in records[:25]],
         "sources": [source_status(result)],
     }
 
