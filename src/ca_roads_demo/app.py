@@ -70,6 +70,10 @@ Caltrans lane closures and chain controls, wildfires). Rules:
   the name exactly as the user gave it and let the server geocode it; it
   resolves exact house numbers. When the user's location is available, it
   is the default trip origin.
+- Cameras and signs are extra senses. When weather or a pass matters
+  ("how's Donner right now"), call get_cameras so the user can SEE it,
+  and get_road_signs to quote what the signs say. Sign text is the
+  freshest local truth; quote it verbatim.
 - If a tool response contains needs_clarification, do not answer and do
   not call more tools. Reply with one short sentence and then a fenced
   code block with language tag "options": first line is the question to
@@ -225,6 +229,42 @@ TOOL_DEFS = [
             },
         },
     },
+    {
+        "name": "get_cameras",
+        "description": (
+            "Live Caltrans roadside camera snapshots, verified live (offline "
+            "cameras filtered). Use when seeing conditions helps: weather on "
+            "a pass, traffic density, fog. Filters: center 'lat,lon' with "
+            "radius_km, route. Returned image_url values are shown to the "
+            "user on the map automatically."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "center": {"type": "string"},
+                "route": {"type": "string"},
+                "radius_km": {"type": "number"},
+                "limit": {"type": "number"},
+            },
+        },
+    },
+    {
+        "name": "get_road_signs",
+        "description": (
+            "What Caltrans changeable message signs are displaying right "
+            "now (blank signs filtered). Signs often carry the freshest "
+            "local truth: chain requirements, closures, delays. Quote sign "
+            "text verbatim. Filters: route, center 'lat,lon' with radius_km."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "route": {"type": "string"},
+                "center": {"type": "string"},
+                "radius_km": {"type": "number"},
+            },
+        },
+    },
 ]
 
 TOOL_FUNCS = {
@@ -234,6 +274,8 @@ TOOL_FUNCS = {
     "get_lane_closures": tools.get_lane_closures,
     "get_chain_controls": tools.get_chain_controls,
     "get_wildfires": tools.get_wildfires,
+    "get_cameras": tools.get_cameras,
+    "get_road_signs": tools.get_road_signs,
 }
 
 _client: anthropic.AsyncAnthropic | None = None
@@ -337,6 +379,18 @@ def extract_geo(tool: str, result: dict) -> dict | None:
         wildfires = [f for f in wildfires if f.get("near_highways")]
     for item in wildfires:
         add("wildfire", item.get("lat"), item.get("lon"), item.get("summary", ""))
+
+    for item in result.get("cameras", []):
+        if isinstance(item.get("lat"), int | float) and item.get("lat"):
+            markers.append({
+                "kind": "camera", "lat": item["lat"], "lon": item["lon"],
+                "label": item.get("name", "camera"),
+                "image": item.get("image_url"),
+            })
+
+    for item in result.get("signs", []):
+        add("sign", item.get("lat"), item.get("lon"),
+            f"Sign: {item.get('message', '')}")
 
     payload: dict = {}
     if markers:
