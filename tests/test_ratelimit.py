@@ -57,3 +57,29 @@ def test_trusted_client_ip_ignores_spoofed_first_hop():
     # No header at all (local dev): transport peer.
     assert trusted_client_ip(None, "127.0.0.1") == "127.0.0.1"
     assert trusted_client_ip("  ,  ", None) == "unknown"
+
+
+async def test_static_paths_bypass_the_bucket():
+    from ca_roads_mcp.ratelimit import RateLimiter, RateLimitMiddleware
+
+    served = []
+
+    async def inner(scope, receive, send):
+        served.append(scope["path"])
+
+    mw = RateLimitMiddleware(
+        inner, RateLimiter(capacity=1, refill_per_second=0),
+        exempt_prefixes=("/static/",),
+    )
+    scope = {"type": "http", "headers": [], "client": ("1.2.3.4", 0)}
+    # Static requests never consume tokens, no matter how many.
+    for _ in range(10):
+        await mw({**scope, "path": "/static/vendor/leaflet.js"}, None, None)
+    # The single bucket token is still available for the API call.
+    await mw({**scope, "path": "/api/ask"}, None, _sink)
+    assert served.count("/static/vendor/leaflet.js") == 10
+    assert "/api/ask" in served
+
+
+async def _sink(message):
+    pass
