@@ -85,13 +85,22 @@ class RateLimiter:
 class RateLimitMiddleware:
     """ASGI middleware answering 429 when a client exceeds its bucket.
 
-    Client identity: first hop of X-Forwarded-For when present (Cloud Run
-    appends the real client there), else the transport peer address.
+    Client identity: the platform-appended (last) X-Forwarded-For entry when
+    present, else the transport peer address. Paths under exempt_prefixes
+    skip the bucket entirely: static assets are cheap to serve, and counting
+    them starves the requests that matter (a page load fetching local fonts
+    and map libraries once drained the whole bucket before the question).
     """
 
-    def __init__(self, app, limiter: RateLimiter | None = None) -> None:
+    def __init__(
+        self,
+        app,
+        limiter: RateLimiter | None = None,
+        exempt_prefixes: tuple[str, ...] = (),
+    ) -> None:
         self.app = app
         self.limiter = limiter or RateLimiter()
+        self.exempt_prefixes = exempt_prefixes
 
     @staticmethod
     def _client_key(scope) -> str:
@@ -104,6 +113,10 @@ class RateLimitMiddleware:
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path", "")
+        if any(path.startswith(p) for p in self.exempt_prefixes):
             await self.app(scope, receive, send)
             return
         if not self.limiter.allow(self._client_key(scope)):
