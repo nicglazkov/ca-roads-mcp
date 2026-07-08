@@ -139,3 +139,48 @@ def wildfire_dict(f: Wildfire) -> dict:
         "discovered_at": _iso(f.discovered_at),
         "summary": wildfire_feed.describe(f),
     }
+
+
+def sign_dict(s) -> dict:
+    return {
+        "route": s.route,
+        "direction": s.direction,
+        "near": s.nearby_place or s.county,
+        "county": s.county,
+        "lat": s.lat,
+        "lon": s.lon,
+        "message": s.text,
+    }
+
+
+def camera_dict(c) -> dict:
+    return {
+        "name": c.location_name or c.nearby_place,
+        "route": c.route,
+        "direction": c.direction,
+        "near": c.nearby_place or c.county,
+        "lat": c.lat,
+        "lon": c.lon,
+        "image_url": c.image_url,
+        "stream_url": c.stream_url or None,
+    }
+
+
+def rwis_dict(w) -> dict:
+    out = {
+        "station": w.location_name,
+        "route": w.route,
+        "lat": w.lat,
+        "lon": w.lon,
+    }
+    if w.air_temp_c is not None:
+        out["air_temp_c"] = w.air_temp_c
+    if w.surface_temp_c is not None:
+        out["pavement_temp_c"] = w.surface_temp_c
+    if w.wind_avg_mph is not None:
+        out["wind_mph"] = w.wind_avg_mph
+    if w.wind_gust_mph is not None:
+        out["gust_mph"] = w.wind_gust_mph
+    if w.visibility_m is not None and w.visibility_m < 5000:
+        out["visibility_m"] = w.visibility_m
+    return out

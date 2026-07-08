@@ -113,6 +113,70 @@ class RoadEvent:
 
 
 @dataclass
+class CmsSign:
+    """A changeable message sign currently displaying something.
+
+    Blank and out-of-service signs are filtered at parse time; if a record
+    exists, a driver is seeing this text right now.
+    """
+
+    index: str
+    district: int
+    route: str
+    county: str
+    nearby_place: str
+    direction: str
+    lat: float | None
+    lon: float | None
+    text: str
+
+
+@dataclass
+class Camera:
+    """A Caltrans roadside camera reported in service.
+
+    in_service comes from the feed; it does not guarantee the image is
+    live (some cameras serve an offline placeholder), so consumers should
+    verify image bytes before showing one.
+    """
+
+    index: str
+    district: int
+    route: str
+    county: str
+    nearby_place: str
+    location_name: str
+    direction: str
+    lat: float | None
+    lon: float | None
+    image_url: str
+    stream_url: str
+
+
+@dataclass
+class RwisStation:
+    """A road-weather station observation (NTCIP units already converted).
+
+    Any field can be None: stations report only the sensors they have, and
+    sentinel values (65535 and friends) mean "not reported".
+    """
+
+    index: str
+    district: int
+    route: str
+    county: str
+    location_name: str
+    lat: float | None
+    lon: float | None
+    air_temp_c: float | None
+    surface_temp_c: float | None
+    wind_avg_mph: float | None
+    wind_gust_mph: float | None
+    visibility_m: float | None
+    precip_rate: float | None
+
+
+@dataclass
 class FeedResult:
     """What a source returns: records plus enough health metadata for an agent
     to reason about freshness and trust.
