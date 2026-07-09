@@ -411,6 +411,7 @@ async def photon_suggest(
             )
         resp.raise_for_status()
         out = []
+        number_match = re.match(r"^(\d+[a-zA-Z]?)\s+(.+)", q)
         for feature in resp.json().get("features", []):
             lon, lat = feature["geometry"]["coordinates"][:2]
             if not _plausible({"lat": lat, "lon": lon}):
@@ -422,14 +423,30 @@ async def photon_suggest(
             )
             if not primary:
                 continue
+            approx = False
+            # When the exact house number is not in OSM, Photon answers with
+            # the street itself and the typed number silently disappears.
+            # Keep it: label the row "<number> <Street>" and mark it
+            # approximate so selection can interpolate a precise position.
+            if (
+                number_match
+                and not props.get("housenumber")
+                and props.get("osm_key") == "highway"
+                and _norm(number_match.group(2)).split()[0] in _norm(primary)
+            ):
+                primary = number_match.group(1) + " " + primary
+                approx = True
             secondary = ", ".join(
                 str(props[k]) for k in ("city", "state") if props.get(k)
             )
-            out.append({
+            entry = {
                 "name": primary + (", " + secondary if secondary else ""),
                 "lat": float(lat), "lon": float(lon),
                 "kind": props.get("osm_value") or "place",
-            })
+            }
+            if approx:
+                entry["approx"] = True
+            out.append(entry)
         # Rank rows that actually contain the typed street/place word above
         # Photon's fuzzy fallbacks (a house-number query once led with an
         # unrelated street);
