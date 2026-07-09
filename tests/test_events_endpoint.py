@@ -57,3 +57,25 @@ def test_mapdata_rejects_bad_bbox(client):
     assert client.get("/api/mapdata").status_code == 400
     assert client.get("/api/mapdata?bbox=1,2,3").status_code == 400
     assert client.get("/api/mapdata?bbox=40,-120,39,-121").status_code == 400
+
+
+def test_suggest_keeps_typed_house_number(client, monkeypatch):
+    import httpx
+    import respx
+
+    from ca_roads_mcp import geocode as geo
+
+    with respx.mock:
+        respx.get(geo.PHOTON_URL).mock(return_value=httpx.Response(200, json={
+            "features": [{
+                "geometry": {"coordinates": [-122.26, 37.39]},
+                "properties": {"name": "Skyline Boulevard",
+                               "osm_key": "highway",
+                               "osm_value": "residential",
+                               "city": "Woodside", "state": "California"},
+            }]
+        }))
+        r = client.get("/api/suggest?q=2101%20skyline%20blvd&lat=37.35&lon=-121.94")
+    s = r.json()["suggestions"][0]
+    assert s["name"].startswith("2101 Skyline Boulevard")
+    assert s["approx"] is True

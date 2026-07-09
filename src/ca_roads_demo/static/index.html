@@ -1140,6 +1140,21 @@ function wireAddress(inputId, valId, suggId, withMyLocation) {
     input.dataset.name = c.name;
     val.className = 'val ok'; val.textContent = '\u2713 ' + c.name;
     close();
+    if (c.approx) {
+      // The row was a street match with the typed number re-attached; ask
+      // the precise geocoder to interpolate the actual house position and
+      // upgrade the coordinates in place. The street point stays as the
+      // fallback if interpolation finds nothing.
+      fetch('/api/geocode?q=' + encodeURIComponent(c.name))
+        .then(r => r.json())
+        .then(d => {
+          const hit = (d.candidates || [])[0];
+          if (hit && input.dataset.name === c.name) {
+            input.dataset.lat = hit.lat; input.dataset.lon = hit.lon;
+            val.textContent = '\u2713 ' + hit.name;
+          }
+        }).catch(() => {});
+    }
   }
   function useMyLocation() {
     close();
