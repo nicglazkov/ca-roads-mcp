@@ -1,41 +1,40 @@
 # Eval results
 
-Generated 2026-07-10T08:16:28+00:00 by `evals/run_evals.py` from `v1.11.0`. Models answer the golden questions using the MCP tool surface served from recorded fixtures; grading is exact-fact matching plus an LLM judge scored against ground truth. Judge: `claude-opus-4-8` (not an evaluated model).
+Generated 2026-07-10T08:27:55+00:00 by `evals/run_evals.py` from `v1.11.1`. Models answer the golden questions using the MCP tool surface served from recorded fixtures; grading is exact-fact matching plus an LLM judge scored against ground truth. Judge: `claude-opus-4-8` (not an evaluated model).
 
 ## Scorecard
 
 | Scenario | `claude-haiku-4-5` | `claude-sonnet-5` |
 |---|---|---|
 | fire-day | 15/28 (54%) | 20/28 (71%) |
-| quiet-day | 19/30 (63%) | 21/30 (70%) |
-| real-2026-07-07 | 2/6 (33%) | 3/6 (50%) |
-| storm-day | 15/27 (56%) | 18/27 (67%) |
-| **all** | 51/91 (56%) | 62/91 (68%) |
+| quiet-day | 21/30 (70%) | 19/30 (63%) |
+| real-2026-07-07 | 2/6 (33%) | 4/6 (67%) |
+| storm-day | 12/27 (44%) | 16/27 (59%) |
+| **all** | 50/91 (55%) | 59/91 (65%) |
 
 ## Pass rate by tool
 
 | Tool | `claude-haiku-4-5` | `claude-sonnet-5` |
 |---|---|---|
-| `check_region` | 2/4 (50%) | 2/4 (50%) |
-| `check_route` | 9/18 (50%) | 13/18 (72%) |
-| `get_chain_controls` | 16/20 (80%) | 16/20 (80%) |
-| `get_incidents` | 11/15 (73%) | 9/15 (60%) |
-| `get_lane_closures` | 5/19 (26%) | 9/19 (47%) |
-| `get_wildfires` | 8/15 (53%) | 13/15 (87%) |
+| `check_region` | 1/4 (25%) | 2/4 (50%) |
+| `check_route` | 11/18 (61%) | 10/18 (56%) |
+| `get_chain_controls` | 14/20 (70%) | 16/20 (80%) |
+| `get_incidents` | 10/15 (67%) | 10/15 (67%) |
+| `get_lane_closures` | 7/19 (37%) | 10/19 (53%) |
+| `get_wildfires` | 7/15 (47%) | 11/15 (73%) |
 
 ## Failure taxonomy
 
 | Category | Count | Example |
 |---|---|---|
-| missed-active-condition | 31 | claude-haiku-4-5 / fire-i5-open: Says southbound is passable when it is actually fully closed at Frazier Mountain Park Rd,... |
-| hallucinated-event | 26 | claude-haiku-4-5 / quiet-101-closures: Correctly reports the Trimble Rd closure but invents an unverified Story Rd on-ramp closure not in... |
-| other | 5 | claude-haiku-4-5 / fire-route-la-sac: Says I-5 closed only northbound but ground truth is both directions closed; also names I-99 instead... |
-| bad-refusal | 4 | claude-haiku-4-5 / quiet-i80-closures: The assistant refused due to claimed feed unavailability instead of reporting the known... |
-| stale-data-trust | 2 | claude-haiku-4-5 / quiet-i80-full-closure-hallucination: The ground truth confirms the feed clearly shows no closures, but the assistant hedged by claiming... |
-| wrong-location | 1 | claude-haiku-4-5 / quiet-route-oakland-sj: I-880 is in the Bay Area (District 4), not District 5, so the caveat about an unavailable feed is... |
+| missed-active-condition | 35 | claude-haiku-4-5 / fire-i5-why: The assistant claims no closure exists when the VULCAN fire has fully closed both directions of I-5... |
+| hallucinated-event | 29 | claude-haiku-4-5 / fire-i5-open: Invents a 'Vulcan wildfire' cause and hedges on the southbound closure that ground truth states is... |
+| other | 5 | claude-haiku-4-5 / real-i80-closures: Reports 8 closures instead of 9 and mischaracterizes them all as construction, though it correctly... |
+| bad-refusal | 3 | claude-haiku-4-5 / fire-99-alternative: The assistant asked for clarification instead of reporting the SR-99 closure at 7th Standard Rd. |
+| stale-data-trust | 1 | claude-haiku-4-5 / quiet-place-davis: Claims all clear on lane closures despite the feed being unavailable, missing the shoulder-only... |
 
 ## Tool selection
 
-25/176 answers led with a different tool than the golden question targets (declared vs first observed call). Not always an error - check_region can legitimately answer a get_incidents question - but a rising rate means the tool descriptions are drifting.
+25/174 answers led with a different tool than the golden question targets (declared vs first observed call). Not always an error - check_region can legitimately answer a get_incidents question - but a rising rate means the tool descriptions are drifting.
 
-Mean answer quality (judge, 1-5): **3.93**
+Mean answer quality (judge, 1-5): **3.87**
