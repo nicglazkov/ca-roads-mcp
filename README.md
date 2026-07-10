@@ -11,12 +11,12 @@
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 
   <p>
-    <a href="#the-web-app">Web app</a> ·
+    <a href="#the-hosted-app">Hosted app</a> ·
     <a href="#add-to-claude">Add to Claude</a> ·
+    <a href="#self-hosting">Self-hosting</a> ·
     <a href="#what-it-knows">Data</a> ·
     <a href="#tools">Tools</a> ·
-    <a href="#evals">Evals</a> ·
-    <a href="#how-it-works">How it works</a>
+    <a href="#evals">Evals</a>
   </p>
 
   <p>
@@ -35,40 +35,56 @@
   </a>
 </div>
 
-Every incident, closure, chain control, wildfire footprint, live camera,
-and message sign in California, on one map, from the feeds CHP and Caltrans
-actually publish. Plan a route with turn-by-turn directions, then ask about
-it in plain words: an assistant reads the same live data and answers in
-seconds. No account, no key, nothing to install.
+This started as an MCP server that gives AI assistants live California
+road data. It grew a web app around it. The map shows what the CHP and
+Caltrans feeds are reporting right now, you can plan a route and print
+the directions, and there is an assistant if you want to ask about a
+drive in plain English.
 
-## The web app
+I host a copy anyone can use. If you would rather run your own, see
+[self-hosting](#self-hosting).
+
+## The hosted app
 
 **[ca-roads-demo-15002631928.us-west1.run.app](https://ca-roads-demo-15002631928.us-west1.run.app)**
 
-- **The whole state, live.** Every layer the feeds carry, individually
-  toggleable with live counts: incidents by type, closures by class,
-  chain controls, weather stations, fire locations and burn footprints,
-  ~3,300 cameras (with an only-live-video filter), and every message sign
-  currently displaying. Camera popups show a verified-live snapshot and a
-  video-stream link; sign popups quote the sign verbatim.
-- **A real route planner.** Address autocomplete with a use-my-location
-  option, validated addresses with an ambiguity picker, road-snapped
-  routes, turn-by-turn directions behind a tidy dropdown, conditions
-  along the way, and print or .txt export.
-- **An assistant one tap away.** Planning a route surfaces plain-language
-  questions about that exact drive; tapping one streams an answer built
-  from the live feeds, with everything it mentions plotted. Times arrive
-  in your time zone, speeds come from live flow data.
+What is on it:
+
+- The map, with a filter panel for each layer: incidents by type,
+  closures by class, chain controls, weather stations, fires and their
+  burn footprints, about 3,300 cameras (there is a checkbox for only the
+  ones with live video), and the message signs currently displaying
+  something. Click a camera for a snapshot that was verified live moments
+  earlier. Sign popups quote the sign word for word.
+- A route planner. Addresses autocomplete as you type, the From field
+  has a use-my-location option, and ambiguous names ask which one you
+  meant. You get turn-by-turn directions (tucked behind a dropdown),
+  whatever is happening along the way, and print or .txt export.
+- The assistant. After you plan a route, a few ready-made questions
+  about that drive show up. Tap one and the answer streams in, built
+  from the same live feeds, with times in your time zone.
+
+Fair warning on the hosting: this runs on a small personal budget. The
+AI answers have daily caps, the service scales to zero so the first
+load of the day can take a few seconds, and there is no uptime promise.
+It is a portfolio project, not a utility.
 
 ## Add to Claude
 
-Hosted (recommended): add a custom connector with this URL:
+This uses my hosted server, so the same caveats apply. Add a custom
+connector with this URL:
 
 ```
 https://ca-roads-mcp-15002631928.us-west1.run.app/mcp
 ```
 
-Local over stdio:
+## Self-hosting
+
+Everything here is MIT licensed and runs without any accounts or keys.
+The optional traffic-speed and Bay Area feeds need free keys.
+
+Run the MCP server locally over stdio (this is the config for Claude
+Desktop or Claude Code):
 
 ```json
 {
@@ -81,8 +97,14 @@ Local over stdio:
 }
 ```
 
-Or from a checkout: `pip install .` then `ca-roads-mcp` (stdio) or
-`ca-roads-mcp --transport http` (streamable HTTP on `$PORT`).
+From a checkout: `pip install .` then `ca-roads-mcp` for stdio, or
+`ca-roads-mcp --transport http` for streamable HTTP on `$PORT`. The web
+app is `pip install ".[demo]"` then `ca-roads-demo` with an
+`ANTHROPIC_API_KEY` in the environment.
+
+To put your own copy on Cloud Run (small enough to fit the free tier
+most months), [docs/deploy.md](docs/deploy.md) has the exact commands,
+the environment variables, and where the optional API keys go.
 
 ## What it knows
 
@@ -132,14 +154,12 @@ flagged stale, with the error attached.
 | `get_cameras(center?, route?)` | Roadside camera snapshots, each verified live before it is returned (offline placeholder frames are filtered by image freshness) |
 | `get_road_signs(route?, center?)` | What changeable message signs are displaying right now, verbatim |
 
-Route and region reports come enriched: NWS weather alerts sampled along
-the trip, notable road-weather readings, recent significant earthquakes,
-the signs and verified cameras along the way, and (with a TomTom key) live
-speeds versus free-flow. A `road_trip_check` prompt template shows clients
-how to compose the tools. Place names work everywhere: the server resolves
-names through a real geocoder and asks which one you meant when a street
-exists in several towns, and a `center` radius sweeps every road around a
-point, including the small ones.
+Route and region reports also carry context that changes the advice:
+weather alerts sampled along the trip, road-weather stations reporting
+something notable, recent significant earthquakes, the signs and cameras
+along the way, and live speeds when a TomTom key is set. Place names go
+through a real geocoder, and when a street exists in several towns the
+tool says so and asks instead of guessing.
 
 ## Evals
 
