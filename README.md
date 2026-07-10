@@ -1,16 +1,19 @@
 <div align="center">
   <img src="docs/logo.svg" width="110" alt="CA Roads logo">
   <h1>CA Roads</h1>
-  <p><b>Live California road conditions for AI assistants, over MCP.</b></p>
+  <p><b>A live map, route planner, and AI assistant for California roads.<br>
+  Also an MCP server, so your assistant can use it too.</b></p>
 
 [![CI](https://github.com/nicglazkov/ca-roads-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/nicglazkov/ca-roads-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/nicglazkov/ca-roads-mcp?color=2f81f7)](https://github.com/nicglazkov/ca-roads-mcp/releases)
 [![Evals](evals/results/badge.svg)](EVALS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 
   <p>
+    <a href="#the-web-app">Web app</a> ·
     <a href="#add-to-claude">Add to Claude</a> ·
-    <a href="https://ca-roads-demo-15002631928.us-west1.run.app">Web demo</a> ·
+    <a href="#what-it-knows">Data</a> ·
     <a href="#tools">Tools</a> ·
     <a href="#evals">Evals</a> ·
     <a href="#how-it-works">How it works</a>
@@ -28,17 +31,34 @@
 
   <a href="https://ca-roads-demo-15002631928.us-west1.run.app">
     <img src="docs/demo.gif" width="880"
-         alt="Demo: typing 'How's the drive from Sacramento to Tahoe right now?' and getting a live verdict with closures plotted along US-50 on a map">
+         alt="Demo: picking Sacramento and South Lake Tahoe from the address autocomplete, planning the route, then tapping a suggested question and getting a live AI answer with speeds and closures on the map">
   </a>
 </div>
 
-Ask "do I need chains to get to Tahoe?" or "is 17 clear right now?" and the
-answer comes from the live feeds CHP and Caltrans publish. The model reads
-the actual dispatch logs instead of guessing from memory. One connector URL.
-No account and no key.
+Every incident, closure, chain control, wildfire footprint, live camera,
+and message sign in California, on one map, from the feeds CHP and Caltrans
+actually publish. Plan a route with turn-by-turn directions, then ask about
+it in plain words: an assistant reads the same live data and answers in
+seconds. No account, no key, nothing to install.
 
-No AI assistant? The [web demo](https://ca-roads-demo-15002631928.us-west1.run.app)
-answers the same questions in a browser and plots everything on a map.
+## The web app
+
+**[ca-roads-demo-15002631928.us-west1.run.app](https://ca-roads-demo-15002631928.us-west1.run.app)**
+
+- **The whole state, live.** Every layer the feeds carry, individually
+  toggleable with live counts: incidents by type, closures by class,
+  chain controls, weather stations, fire locations and burn footprints,
+  ~3,300 cameras (with an only-live-video filter), and every message sign
+  currently displaying. Camera popups show a verified-live snapshot and a
+  video-stream link; sign popups quote the sign verbatim.
+- **A real route planner.** Address autocomplete with a use-my-location
+  option, validated addresses with an ambiguity picker, road-snapped
+  routes, turn-by-turn directions behind a tidy dropdown, conditions
+  along the way, and print or .txt export.
+- **An assistant one tap away.** Planning a route surfaces plain-language
+  questions about that exact drive; tapping one streams an answer built
+  from the live feeds, with everything it mentions plotted. Times arrive
+  in your time zone, speeds come from live flow data.
 
 ## Add to Claude
 
@@ -108,30 +128,39 @@ flagged stale, with the error attached.
 | `get_incidents(highway?, area?, center?)` | Live CHP incidents by route, dispatch area, or a point and radius |
 | `get_lane_closures(route?, district?, center?)` | Closures in place right now, classified per the table above |
 | `get_chain_controls(route?, center?)` | Current chain requirements; says "none active" explicitly in the off-season |
-| `get_wildfires(near_route?, center?)` | Active fires with size and containment, flagged near major highways |
+| `get_wildfires(near_route?, center?)` | Active fires with size, containment, and mapped perimeter edges, flagged near major highways |
+| `get_cameras(center?, route?)` | Roadside camera snapshots, each verified live before it is returned (offline placeholder frames are filtered by image freshness) |
+| `get_road_signs(route?, center?)` | What changeable message signs are displaying right now, verbatim |
 
-A `road_trip_check` prompt template shows clients how to compose the tools
-for a trip check. Place names work everywhere: the assistant resolves a town
-to coordinates, and a `center` radius sweeps every road around it, including
-the small ones.
+Route and region reports come enriched: NWS weather alerts sampled along
+the trip, notable road-weather readings, recent significant earthquakes,
+the signs and verified cameras along the way, and (with a TomTom key) live
+speeds versus free-flow. A `road_trip_check` prompt template shows clients
+how to compose the tools. Place names work everywhere: the server resolves
+names through a real geocoder and asks which one you meant when a street
+exists in several towns, and a `center` radius sweeps every road around a
+point, including the small ones.
 
 ## Evals
 
 The eval suite ships with the server and gates every release:
 
-- **Recorded fixtures** for three scenarios: a Sierra storm day (R-2 chains
+- **Recorded fixtures** for four scenarios: a Sierra storm day (R-2 chains
   Twin Bridges to Meyers, avalanche closure at Emerald Bay), a fire-closure
-  day (I-5 shut both directions at the Grapevine), and a quiet summer day.
-  A recording mode banks real feed captures for future scenarios.
-- **85 golden questions** with ground truth, including traps: closures that
+  day (I-5 shut both directions at the Grapevine), a quiet summer day, and
+  a real capture of all feeds from an actual fire-season day, replayed
+  byte-for-byte including one district feed's 500 error.
+- **91 golden questions** with ground truth, including traps: closures that
   are scheduled but not established, ramp closures phrased as "is the
   highway closed", forecast questions the data cannot answer.
 - **A grading harness** that runs Claude against the tools in fixture mode
-  and scores exact-fact matching plus an LLM judge, with a failure taxonomy
-  (missed condition, hallucinated event, stale-data trust, wrong location).
+  and scores exact-fact matching plus an LLM judge (claude-opus-4-8, never
+  an evaluated model), with a failure taxonomy and a tool-selection drift
+  metric. Every run appends to a committed history file so the trend is
+  public.
 
-Current scorecard: [EVALS.md](EVALS.md). Evals re-run on every release via
-GitHub Actions and update the badge above.
+Current scorecard: [EVALS.md](EVALS.md). Evals re-run on every release,
+scored against the release tag, and update the badge above.
 
 ```sh
 pip install -e ".[dev,evals]"
@@ -143,22 +172,23 @@ python evals/run_evals.py            # needs ANTHROPIC_API_KEY
 
 ```mermaid
 flowchart LR
-    subgraph feeds["Public feeds"]
-        CHP["CHP sa.xml<br/>~1/min"]
-        LCS["Caltrans LCS<br/>12 districts"]
-        CC["Chain controls<br/>9 districts"]
-        WF["WFIGS ArcGIS"]
+    subgraph feeds["13 public feeds"]
+        CHP["CHP incidents"]
+        CT["Caltrans: closures, chains,<br/>signs, cameras, road weather"]
+        WF["WFIGS fires + perimeters"]
+        WX["NWS alerts / USGS quakes"]
+        OPT["TomTom / 511 / NV DOT<br/>(optional keys)"]
     end
     subgraph pkg["ca_roads (feed layer)"]
         F["async fetchers<br/>TTL cache + stale-serve<br/>salvaging parsers"]
         D["cross-source dedupe"]
     end
     subgraph srv["ca_roads_mcp"]
-        T["6 MCP tools<br/>corridors + regions<br/>closure taxonomy"]
+        T["8 MCP tools<br/>corridors + regions<br/>closure taxonomy<br/>gazetteer geocoding"]
     end
-    CHP & LCS & CC & WF --> F --> D --> T
+    CHP & CT & WF & WX & OPT --> F --> D --> T
     T -->|"stdio / streamable HTTP"| MCP["Claude & MCP clients"]
-    T -->|"in-process"| DEMO["Web demo<br/>(Claude + map)"]
+    T -->|"in-process"| DEMO["Web app<br/>map + planner + assistant"]
 ```
 
 Three packages, cleanly layered:
@@ -173,9 +203,11 @@ Three packages, cleanly layered:
   region tables, route-name normalization ("17", "hwy 50", "I80" all work),
   and docstrings written for the LLM consumer: what the data is, its refresh
   cadence, and its limits.
-- **`ca_roads_demo`**: the public demo. Claude in a tool loop over the same
-  tool functions, streaming SSE with map geometry, hard cost caps (per-IP
-  rate limit, daily question caps, a global daily dollar budget).
+- **`ca_roads_demo`**: the public web app. The standalone map and route
+  planner (viewport-driven data API, address autocomplete, turn-by-turn
+  via OSRM with a Valhalla fallback), plus Claude in a tool loop over the
+  same tool functions, streaming SSE with map geometry, hard cost caps
+  (per-IP rate limit, daily question caps, a global daily dollar budget).
 
 ## Development
 
