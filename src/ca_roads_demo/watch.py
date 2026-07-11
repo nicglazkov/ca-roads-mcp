@@ -306,7 +306,9 @@ def watch_matches(watch: dict, lat: float, lon: float) -> bool:
     if not lat or not lon:
         return False
     if watch.get("type") == "polygon":
-        return point_in_polygon(lat, lon, watch.get("points") or [])
+        pairs = [[p["lat"], p["lon"]] if isinstance(p, dict) else p
+                 for p in (watch.get("points") or [])]
+        return point_in_polygon(lat, lon, pairs)
     center = watch.get("center") or {}
     return haversine_km(center.get("lat", 0.0), center.get("lon", 0.0),
                         lat, lon) <= float(watch.get("radius_km") or 0)
@@ -459,7 +461,9 @@ async def api_watch_create(request: Request) -> JSONResponse:
                 if not (CA_LAT[0] <= lat <= CA_LAT[1]
                         and CA_LON[0] <= lon <= CA_LON[1]):
                     return _err("all points must be in California")
-                points.append([lat, lon])
+                # Stored as maps, not pairs: Firestore rejects nested
+                # arrays ("400 Nested arrays are not allowed").
+                points.append({"lat": lat, "lon": lon})
         except (TypeError, ValueError, IndexError):
             return _err("points must be [lat, lon] pairs")
         watch.update({"type": "polygon", "points": points})

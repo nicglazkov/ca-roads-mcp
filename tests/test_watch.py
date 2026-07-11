@@ -13,6 +13,18 @@ from starlette.testclient import TestClient
 from ca_roads_demo import watch
 
 
+def _firestore_would_reject(value, inside_array=False):
+    """Firestore refuses arrays nested inside arrays; the production
+    polygon-500 slipped through because this store did not. Mimic the
+    restriction so storage-shape bugs fail here first."""
+    if isinstance(value, list | tuple):
+        return inside_array or any(
+            _firestore_would_reject(v, inside_array=True) for v in value)
+    if isinstance(value, dict):
+        return any(_firestore_would_reject(v) for v in value.values())
+    return False
+
+
 class MemoryStore:
     """In-memory stand-in matching FirestoreStore's surface."""
 
@@ -50,6 +62,8 @@ class MemoryStore:
                 if uid is None or v["uid"] == uid]
 
     async def create_watch(self, data):
+        if _firestore_would_reject(data):
+            raise ValueError("400 Nested arrays are not allowed")
         self._next += 1
         wid = f"w{self._next}"
         self.watches[wid] = dict(data)
@@ -215,6 +229,18 @@ def test_polygon_needs_three_points_inside_ca(approved_client):
                                [39.2, -119.9]]}
     assert approved_client.post("/api/watch/create", json=good,
                                 headers=auth()).status_code == 200
+
+
+def test_polygon_stores_firestore_safe_points(approved_client, store):
+    body = {"type": "polygon", "name": "Tahoe", "kinds": ["fire"],
+            "points": [[38.9, -120.2], [39.2, -120.2], [39.2, -119.9]]}
+    wid = approved_client.post("/api/watch/create", json=body,
+                               headers=auth()).json()["id"]
+    stored = store.watches[wid]["points"]
+    assert stored[0] == {"lat": 38.9, "lon": -120.2}
+    # And the checker matches against the stored dict form.
+    assert watch.watch_matches(store.watches[wid], 39.05, -120.15)
+    assert not watch.watch_matches(store.watches[wid], 37.0, -122.0)
 
 
 def test_watch_count_cap(approved_client):
