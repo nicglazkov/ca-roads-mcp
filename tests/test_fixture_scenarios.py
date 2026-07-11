@@ -255,7 +255,12 @@ async def test_real_recording_plays_back(scenario, monkeypatch):
     assert len(chp.records) == 197
     assert len(lcs.records) == 293
     assert len(chains.records) == 0  # July; D12's 500 replays as recorded
-    assert len(fires.records) == 232
+    # 232 recorded WFIGS records minus 18 same-fire duplicates the merge
+    # layer now collapses (LAC dispatch re-entries at identical
+    # coordinates, same-named unit incidents). The CAL FIRE feed was not
+    # recorded on 2026-07-07, so it replays as unavailable and adds
+    # nothing here.
+    assert len(fires.records) == 214
 
     fires_i5 = await tool_server.get_wildfires(near_route="I-5")
     assert fires_i5["count"] > 40
