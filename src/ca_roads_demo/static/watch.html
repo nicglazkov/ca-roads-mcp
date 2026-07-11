@@ -426,7 +426,9 @@ function renderWatches() {
         radius: w.radius_km * 1000, color: '#1c3a2e', weight: 1.5,
         fillColor: '#1c3a2e', fillOpacity: 0.08 }).addTo(savedLayer);
     } else {
-      shape = L.polygon(w.points, { color: '#1c3a2e', weight: 1.5,
+      const pts = (w.points || []).map(
+        (pt) => Array.isArray(pt) ? pt : [pt.lat, pt.lon]);
+      shape = L.polygon(pts, { color: '#1c3a2e', weight: 1.5,
         fillColor: '#1c3a2e', fillOpacity: 0.08 }).addTo(savedLayer);
     }
     const row = document.createElement('div');
