@@ -7,10 +7,12 @@ shutdown.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import httpx
 
+from ca_roads.feeds import calfire as calfire_feed
 from ca_roads.feeds import chains as chains_feed
 from ca_roads.feeds import chp as chp_feed
 from ca_roads.feeds import lcs as lcs_feed
@@ -27,6 +29,7 @@ class RoadData:
         self.lcs = lcs_feed.LcsSource(self._client)
         self.chains = chains_feed.ChainSource(self._client)
         self.wildfires_source = wildfire_feed.WildfireSource(self._client)
+        self.calfire_source = calfire_feed.CalFireSource(self._client)
         self.cms = portal_feed.PortalSource(
             self._client, "cms", portal_feed.parse_cms, "cms")
         self.cctv = portal_feed.PortalSource(
@@ -90,5 +93,9 @@ class RoadData:
         return await self.rwis.get(districts)
 
     async def wildfires(self) -> FeedResult:
-        """Active California wildfires (5-minute cache)."""
-        return await self.wildfires_source.get()
+        """Active California wildfires: WFIGS base plus CAL FIRE
+        incidents WFIGS does not list yet (both on 5-minute caches,
+        deduplicated by name and distance)."""
+        wfigs, calfire = await asyncio.gather(
+            self.wildfires_source.get(), self.calfire_source.get())
+        return calfire_feed.merge_with_wfigs(wfigs, calfire)

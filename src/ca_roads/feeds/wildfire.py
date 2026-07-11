@@ -1,7 +1,7 @@
 """Active California wildfires from the WFIGS current-incidents ArcGIS layer
-(hosted by NIFC). The CAL FIRE incidents feed blocks non-browser clients, so
-WFIGS is used instead; it is the authoritative interagency source and openly
-queryable.
+(hosted by NIFC). WFIGS is the authoritative interagency base; the CAL FIRE
+incidents feed (feeds/calfire.py) supplements it with CAL FIRE's own
+postings, merged and deduplicated in RoadData.wildfires().
 
 Each fire is a point of origin with name, size, and containment. ArcGIS
 reports query failures as HTTP 200 with an {"error": ...} body; that is
