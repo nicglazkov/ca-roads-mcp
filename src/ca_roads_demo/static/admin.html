@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1f33">
 <title>Admin - CA Roads</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
@@ -66,8 +67,12 @@ code { background:var(--sky-soft); padding:1px 7px; border-radius:6px;
   .topbar .wordmark { white-space:nowrap; font-size:.98rem }
   .topbar nav { overflow-x:auto; scrollbar-width:none }
   .topbar nav a { white-space:nowrap; padding:7px 9px }
-  main { padding:14px 12px 40px }
+  main { padding:14px 12px calc(40px + env(safe-area-inset-bottom)) }
   button { min-height:40px }
+  input { font-size:16px !important }
+  body { overflow-x:clip }
+  .topbar { padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right)) }
 }
 </style>
 </head>

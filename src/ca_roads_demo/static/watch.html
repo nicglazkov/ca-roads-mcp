@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1f33">
 <title>Watch areas - CA Roads</title>
 <meta name="description" content="Get alerted when incidents, closures, chain controls, or wildfires appear in an area you care about.">
 <meta name="robots" content="noindex">
@@ -20,6 +21,8 @@
 }
 * { box-sizing:border-box; margin:0 }
 html, body { height:100% }
+* { -webkit-tap-highlight-color: transparent }
+button:active { transform:scale(.985) }
 body { background:var(--bg); color:var(--ink);
   font:14.5px/1.55 Inter, system-ui, sans-serif }
 .topbar { background:var(--navy); color:#e9eef5; display:flex; align-items:center;
@@ -79,6 +82,13 @@ input:focus { border-color:var(--sky) }
   main { padding:14px 12px 40px }
   button.primary, button.ghost { min-height:44px }
   .witem > button { padding:8px }
+  input, select, textarea { font-size:16px !important }
+  #wmap { height:48dvh }
+  body { overflow-x:clip }
+  .topbar { padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right)) }
+  main { padding-bottom:calc(40px + env(safe-area-inset-bottom)) }
+  .kinds label, .chans label { padding:4px 0 }
 }
 #wmap { height:520px; min-height:320px; border-radius:14px; border:1px solid var(--line) }
 .field { margin-bottom:12px }
