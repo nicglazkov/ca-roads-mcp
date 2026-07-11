@@ -31,6 +31,7 @@ from starlette.responses import (
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from ca_roads.feeds import calfire as calfire_feed
 from ca_roads.feeds import lcs as lcs_feed
 from ca_roads.feeds import tomtom as tomtom_feed
 from ca_roads.feeds import wildfire as wildfire_feed
@@ -866,9 +867,11 @@ async def api_mapdata(request: Request):
                     road.client, lat_min - 0.2, lon_min - 0.2,
                     lat_max + 0.2, lon_max + 0.2)
                 _PERIM_CACHE[key] = (time.monotonic(), perims)
-            by_name = {p["name"]: p for p in perims if p["name"]}
+            by_name = {calfire_feed.normalize_fire_name(p["name"]): p
+                       for p in perims if p["name"]}
             for m in fire_markers:
-                perim = by_name.get((m["name"] or "").upper())
+                perim = by_name.get(
+                    calfire_feed.normalize_fire_name(m["name"] or ""))
                 if perim:
                     pts = perim["points"]
                     step = max(1, len(pts) // 120)
@@ -1006,7 +1009,7 @@ async def _prewarm() -> None:
     """Fill the feed caches in the background the moment a cold instance
     boots. The static page serves immediately either way; this makes the
     first map-data request land on warm caches instead of paying for all
-    thirteen feeds itself. Failures are fine - the request path retries."""
+    fourteen feeds itself. Failures are fine - the request path retries."""
     road = tools.get_road()
     with contextlib.suppress(Exception):
         await asyncio.gather(

@@ -128,6 +128,7 @@ the environment variables, and where the optional API keys go.
 | **Caltrans LCS** | Lane and road closures physically in place right now (CHP code 1097), classified by what they mean for through traffic | 5-minute cache |
 | **Caltrans chain controls** | R-1/R-2/R-3 requirements at mountain checkpoints | 5-minute cache |
 | **WFIGS** | Active wildfires (name, size, containment), flagged within ~10 miles of major highways; perimeter edges refine distances for big fires | 5-minute cache |
+| **CAL FIRE** | CAL FIRE's own incident postings, merged into the wildfire layer for fires WFIGS does not list yet | 5-minute cache |
 | **Caltrans CMS** | What changeable message signs display right now (blank signs filtered) | 2-minute cache |
 | **Caltrans CCTV** | Roadside camera snapshots, image-verified live before return | per query |
 | **Caltrans RWIS** | Road-weather stations: pavement temperature, gusts, visibility on the passes | 5-minute cache |
@@ -210,7 +211,7 @@ flowchart LR
     subgraph feeds["13 public feeds"]
         CHP["CHP incidents"]
         CT["Caltrans: closures, chains,<br/>signs, cameras, road weather"]
-        WF["WFIGS fires + perimeters"]
+        WF["WFIGS + CAL FIRE fires + perimeters"]
         WX["NWS alerts / USGS quakes"]
         OPT["TomTom / 511 / NV DOT<br/>(optional keys)"]
     end
@@ -264,7 +265,7 @@ Docs: [deploying](docs/deploy.md) ·
 
 ## Disclaimer
 
-Data: CHP, Caltrans, WFIGS. Not affiliated with any agency. Conditions
+Data: CHP, Caltrans, WFIGS, CAL FIRE. Not affiliated with any agency. Conditions
 change faster than any feed; verify before you drive (511 or
 [quickmap.dot.ca.gov](https://quickmap.dot.ca.gov)).
 
