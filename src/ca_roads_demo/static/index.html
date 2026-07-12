@@ -295,6 +295,13 @@ aside { background:var(--card); border-right:1px solid var(--line);
 .pop .hist { color:#8a94a3; font-size:.72rem; margin-top:7px;
   border-top:1px dashed var(--line); padding-top:6px; line-height:1.5 }
 .pop .lanes-strong { font-weight:700; color:#a02c2c }
+.pinchoice { display:flex; flex-direction:column; gap:6px; min-width:150px }
+.pinchoice button, .pinchoice-single { font:600 .8rem Inter; color:var(--sky);
+  background:var(--sky-soft); border:1px solid #cfe0fb; border-radius:8px;
+  padding:8px 12px; cursor:pointer; white-space:nowrap }
+.pinchoice button:hover, .pinchoice-single:hover { background:#dbe9fd }
+.viadot { background:#0b1f33; border:3px solid #fff; border-radius:99px;
+  box-shadow:0 1px 4px rgba(15,28,43,.45); cursor:grab }
 .layersbtn { display:none; position:absolute; top:12px; right:12px;
   z-index:900; align-items:center; gap:6px; background:var(--card);
   border:1px solid var(--line); border-radius:10px; padding:9px 13px;
@@ -1715,10 +1722,12 @@ function osrmToRoute(r) {
     })).filter(s => s.miles > 0.005 || /Arrive|Head/.test(s.text)),
   };
 }
-async function osrmDirections(a, b) {
-  const pts = [a, b].map(p => p[1].toFixed(5) + ',' + p[0].toFixed(5)).join(';');
+async function osrmDirections(points) {
+  const pts = points.map(p => p[1].toFixed(5) + ',' + p[0].toFixed(5)).join(';');
+  // OSRM only offers alternatives for two-point requests.
+  const alts = points.length === 2 ? '&alternatives=2' : '';
   const res = await fetch('https://router.project-osrm.org/route/v1/driving/' + pts +
-    '?overview=full&geometries=geojson&steps=true&alternatives=2',
+    '?overview=full&geometries=geojson&steps=true' + alts,
     { signal: AbortSignal.timeout(8000) });
   const data = await res.json();
   if (data.code !== 'Ok' || !data.routes?.length) return null;
@@ -1735,9 +1744,9 @@ function valhallaTripToRoute(trip) {
     })),
   };
 }
-async function valhallaDirections(a, b) {
-  const req = { locations: [{ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }],
-    costing: 'auto', alternates: 2,
+async function valhallaDirections(points) {
+  const req = { locations: points.map(p => ({ lat: p[0], lon: p[1] })),
+    costing: 'auto', alternates: points.length === 2 ? 2 : 0,
     directions_options: { units: 'miles' } };
   const res = await fetch('https://valhalla1.openstreetmap.de/route?json=' +
     encodeURIComponent(JSON.stringify(req)), { signal: AbortSignal.timeout(8000) });
@@ -1749,9 +1758,9 @@ async function valhallaDirections(a, b) {
   }
   return routes.slice(0, 3);
 }
-async function anyDirections(a, b) {
-  try { const r = await osrmDirections(a, b); if (r && r.length) return r; } catch (e) {}
-  try { return await valhallaDirections(a, b); } catch (e) { return null; }
+async function anyDirections(points) {
+  try { const r = await osrmDirections(points); if (r && r.length) return r; } catch (e) {}
+  try { return await valhallaDirections(points); } catch (e) { return null; }
 }
 
 const layerRoute = L.layerGroup().addTo(map);
@@ -1819,15 +1828,29 @@ document.getElementById('sharebtn').addEventListener('click', async () => {
 });
 let plannedRoutes = [];
 const planbtn = document.getElementById('planbtn');
-planbtn.addEventListener('click', async () => {
-  if (!fromF.input.dataset.lat) await fromF.validate();
-  if (!toF.input.dataset.lat) await toF.validate();
-  if (!fromF.input.dataset.lat || !toF.input.dataset.lat) return;
-  const a = [+fromF.input.dataset.lat, +fromF.input.dataset.lon];
-  const b = [+toF.input.dataset.lat, +toF.input.dataset.lon];
-  planbtn.disabled = true; planbtn.textContent = 'Planning…';
+let viaPoints = [];
+let lastEnds = null;
+let suppressPinOnce = false;
+
+function viaOrdered(routeLatlngs) {
+  // Waypoints keep their order along the current route so dragging a
+  // second bend never crosses the wires with the first.
+  const frac = (pt) => {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < routeLatlngs.length; i += 3) {
+      const d = Math.hypot(routeLatlngs[i][0] - pt[0],
+        routeLatlngs[i][1] - pt[1]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  };
+  return [...viaPoints].sort((x, y) => frac(x) - frac(y));
+}
+
+async function planWith(points, a, b) {
+  planbtn.disabled = true; planbtn.textContent = 'Planning\u2026';
   try {
-    const routes = await anyDirections(a, b);
+    const routes = await anyDirections(points);
     if (!routes || !routes.length) {
       document.getElementById('routesum').textContent =
         'Route servers are busy - try again in a moment.';
@@ -1840,6 +1863,55 @@ planbtn.addEventListener('click', async () => {
   } finally {
     planbtn.disabled = false; planbtn.textContent = 'Plan route';
   }
+}
+
+async function replanVias() {
+  if (!lastEnds) return;
+  const base = plannedRoute ? plannedRoute.route.latlngs : [];
+  await planWith([lastEnds.a, ...viaOrdered(base), lastEnds.b],
+    lastEnds.a, lastEnds.b);
+}
+
+planbtn.addEventListener('click', async () => {
+  if (!fromF.input.dataset.lat) await fromF.validate();
+  if (!toF.input.dataset.lat) await toF.validate();
+  if (!fromF.input.dataset.lat || !toF.input.dataset.lat) return;
+  const a = [+fromF.input.dataset.lat, +fromF.input.dataset.lon];
+  const b = [+toF.input.dataset.lat, +toF.input.dataset.lon];
+  viaPoints = [];
+  lastEnds = { a, b };
+  await planWith([a, b], a, b);
+});
+
+// Click an empty spot on the map to route from or to it, like the big
+// guys do.
+const pinPopup = L.popup({ closeButton: true, autoClose: true });
+function setPinField(field, ll) {
+  const name = 'Pin ' + ll.lat.toFixed(3) + ' / ' + ll.lng.toFixed(3);
+  field.input.value = name;
+  field.input.dataset.lat = ll.lat;
+  field.input.dataset.lon = ll.lng;
+  field.input.dataset.name = name;
+  const val = document.getElementById(
+    field.input.id === 'from' ? 'fromval' : 'toval');
+  val.className = 'val ok'; val.textContent = '\u2713 ' + name;
+  map.closePopup(pinPopup);
+  if (fromF.input.dataset.lat && toF.input.dataset.lat) planbtn.click();
+}
+map.on('click', (e) => {
+  // A reshape drag ends with a synthetic map click; swallow it.
+  if (suppressPinOnce) { suppressPinOnce = false; return; }
+  const wrap = document.createElement('div');
+  wrap.className = 'pinchoice';
+  const mkBtn = (label, field) => {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = label;
+    btn.addEventListener('click', () => setPinField(field, e.latlng));
+    return btn;
+  };
+  wrap.append(mkBtn('Route from here', fromF),
+              mkBtn('Route to here', toF));
+  pinPopup.setLatLng(e.latlng).setContent(wrap).openOn(map);
 });
 
 function mobileReveal(el) {
@@ -1918,6 +1990,65 @@ async function colorRouteByTraffic(route, baseLine) {
   } catch (e) { /* keep the navy line */ }
 }
 
+function wireReshape(route) {
+  // A wide, invisible line over the route is the drag handle: pull it
+  // anywhere and the trip re-routes through that spot. Via points stay
+  // as draggable dots; clicking one removes it.
+  const grab = L.polyline(route.latlngs, { color: '#000', weight: 22,
+    opacity: 0.001, interactive: true }).addTo(layerRoute);
+  let ghost = null;
+  grab.on('mousedown', (e) => {
+    if (viaPoints.length >= 5) return;
+    L.DomEvent.stop(e.originalEvent);
+    map.dragging.disable();
+    ghost = L.circleMarker(e.latlng, { radius: 7, color: '#fff',
+      weight: 2, fillColor: '#0b1f33', fillOpacity: 1 }).addTo(layerRoute);
+    const move = (ev) => ghost.setLatLng(ev.latlng);
+    const up = async (ev) => {
+      map.off('mousemove', move); map.off('mouseup', up);
+      map.dragging.enable();
+      suppressPinOnce = true;
+      setTimeout(() => { suppressPinOnce = false; }, 400);
+      const ll = ghost.getLatLng();
+      layerRoute.removeLayer(ghost); ghost = null;
+      viaPoints.push([ll.lat, ll.lng]);
+      await replanVias();
+    };
+    map.on('mousemove', move);
+    map.on('mouseup', up);
+  });
+  // Touch fallback: tap the route, confirm the stop in a popup.
+  grab.on('click', (e) => {
+    if (!window.matchMedia('(max-width: 960px)').matches) return;
+    if (viaPoints.length >= 5) return;
+    L.DomEvent.stop(e.originalEvent);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = 'Route through here';
+    btn.className = 'pinchoice-single';
+    btn.addEventListener('click', async () => {
+      map.closePopup();
+      viaPoints.push([e.latlng.lat, e.latlng.lng]);
+      await replanVias();
+    });
+    L.popup().setLatLng(e.latlng).setContent(btn).openOn(map);
+  });
+  for (const [i, v] of viaPoints.entries()) {
+    const mk = L.marker(v, { draggable: true, zIndexOffset: 500,
+      icon: L.divIcon({ className: 'viadot', iconSize: [16, 16] }) })
+      .addTo(layerRoute);
+    mk.bindTooltip('Drag to move \u00b7 click to remove');
+    mk.on('dragend', async () => {
+      const ll = mk.getLatLng();
+      viaPoints[i] = [ll.lat, ll.lng];
+      await replanVias();
+    });
+    mk.on('click', async () => {
+      viaPoints.splice(i, 1);
+      await replanVias();
+    });
+  }
+}
+
 function showRoute(route, others, a, b) {
   mobileReveal(document.getElementById('routealts'));
   plannedRoute = { route, a, b,
@@ -1930,6 +2061,7 @@ function showRoute(route, others, a, b) {
   const baseLine = L.polyline(route.latlngs,
     { color: '#0b1f33', weight: 4.5, opacity: 0.85 }).addTo(layerRoute);
   colorRouteByTraffic(route, baseLine);
+  wireReshape(route);
   [[a, 'A', plannedRoute.fromName], [b, 'B', plannedRoute.toName]].forEach(([pnt, letter, name]) => {
     L.marker(pnt, { icon: L.divIcon({ className: 'route-end', html: letter, iconSize: [22, 22] }),
       zIndexOffset: 400 }).bindPopup(esc(name)).addTo(layerRoute);

@@ -1318,7 +1318,7 @@ app = RateLimitMiddleware(
                      # as static files; the mutating watch APIs stay
                      # inside the bucket (and are token-gated anyway).
                      "/watch", "/admin", "/sw.js", "/manifest.webmanifest",
-                     "/privacy", "/terms", "/trip/", "/api/trip/",
+                     "/privacy", "/terms", "/trip/", "/api/trip",
                      "/api/watch/config", "/api/staticmap"),
 )
 

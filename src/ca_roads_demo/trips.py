@@ -30,6 +30,24 @@ DEMO_URL = os.environ.get(
 MAX_TRIP_POINTS = 500
 MAX_TRIP_STEPS = 80
 TRIP_TTL_DAYS = 180
+# Trip creation has its own quota instead of the shared request bucket:
+# the page's event beacons drain that bucket, which made the Share
+# button 429 for normal use. In-process like every other guard.
+TRIPS_PER_DAY_PER_IP = 20
+_trip_counts: dict[str, tuple[str, int]] = {}
+
+
+def _trip_allowed(ip: str) -> bool:
+    day = datetime.now(UTC).date().isoformat()
+    stored_day, count = _trip_counts.get(ip, (day, 0))
+    if stored_day != day:
+        count = 0
+    if count >= TRIPS_PER_DAY_PER_IP:
+        return False
+    _trip_counts[ip] = (day, count + 1)
+    if len(_trip_counts) > 5000:
+        _trip_counts.clear()
+    return True
 
 _TEMPLATE_PATH = Path(__file__).parent / "static" / "trip.html"
 _template_cache: str | None = None
@@ -77,6 +95,12 @@ def decode_polyline(encoded: str, precision: int = 5) -> list:
 
 
 async def api_trip_create(request: Request) -> JSONResponse:
+    from ca_roads_demo.app import client_ip
+
+    if not _trip_allowed(client_ip(request)):
+        return JSONResponse(
+            {"error": "daily share-link limit reached; try tomorrow"},
+            status_code=429)
     body = None
     with contextlib.suppress(Exception):
         body = await request.json()
