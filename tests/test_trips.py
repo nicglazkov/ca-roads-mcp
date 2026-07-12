@@ -90,3 +90,11 @@ def test_trip_page_escapes_names(client):
     html = client.get("/trip/" + trip_id).text
     assert "<script>x</script>" not in html.split("__TRIP_JSON__")[0]
     assert "&lt;script&gt;" in html
+
+
+def test_trip_creation_has_its_own_daily_quota(client, monkeypatch):
+    monkeypatch.setattr(trips, "TRIPS_PER_DAY_PER_IP", 3)
+    trips._trip_counts.clear()
+    for _ in range(3):
+        assert client.post("/api/trip", json=ROUTE).status_code == 200
+    assert client.post("/api/trip", json=ROUTE).status_code == 429
