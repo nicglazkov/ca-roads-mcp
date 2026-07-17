@@ -1,0 +1,28 @@
+name: Feature request
+description: An idea for CommuteScout
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The drive, the situation, the thing you couldn't find out.
+      placeholder: I commute over the pass daily and want to know before I leave whether…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which part of CommuteScout?
+      options:
+        - Web app (map / planner / assistant)
+        - Watch areas & alerts
+        - MCP server / tools
+        - Data sources
+        - Other

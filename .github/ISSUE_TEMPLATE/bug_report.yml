@@ -1,0 +1,40 @@
+name: Bug report
+description: Something is broken or wrong
+labels: [bug]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did this happen?
+      options:
+        - Hosted app (commutescout.com)
+        - Hosted MCP server (mcp.commutescout.com)
+        - Self-hosted / local
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+      placeholder: Planned a route from X to Y and the closure on SR-nn didn't show…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+  - type: input
+    id: version
+    attributes:
+      label: Version / environment
+      description: Release tag for self-hosted (see the footer or `/health`), or browser + device for the hosted app.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, console errors, approximate time (feeds are live, so "when" matters).

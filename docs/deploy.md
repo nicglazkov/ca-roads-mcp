@@ -1,8 +1,13 @@
-# Deploying to Cloud Run
+# Self-hosting on Cloud Run
 
-The server runs as a single Cloud Run service using the streamable HTTP
-transport. Scale-to-zero is fine: cold starts are a few seconds and the data
-is fetched fresh anyway.
+This is the complete runbook for running your own CommuteScout, using
+the same commands that deploy the hosted app. (If you just want to use
+CommuteScout, [commutescout.com](https://commutescout.com) is always
+current and needs none of this.)
+
+The MCP server runs as a single Cloud Run service using the streamable
+HTTP transport. Scale-to-zero is fine: cold starts are a few seconds
+and the data is fetched fresh anyway.
 
 ## Runtime identity (least privilege)
 
