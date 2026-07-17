@@ -6,11 +6,11 @@
     "url": "https://github.com/nicglazkov/commutescout",
     "source": "github"
   },
-  "version": "2.23.0",
+  "version": "2.24.0",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://ca-roads-mcp-15002631928.us-west1.run.app/mcp"
+      "url": "https://mcp.commutescout.com/mcp"
     }
   ]
 }
