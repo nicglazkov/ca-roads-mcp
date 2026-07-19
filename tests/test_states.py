@@ -162,8 +162,11 @@ def test_md_chart_parses_events_signs_weather():
                 return FakeResp({"data": [
                     {"lat": "38.9", "lon": "-76.2", "commMode": "ONLINE",
                      "description": "US 50 WEST",
-                     "msgHTML": "<table><tr><td>CRASH AHEAD</td></tr>"
-                                "<tr><td>USE CAUTION</td></tr></table>"},
+                     # Real CHART feeds ship the markup entity-escaped.
+                     "msgHTML": "&lt;table class='dmsMsg'&gt;&lt;tr&gt;"
+                                "&lt;td&gt;CRASH AHEAD&lt;/td&gt;&lt;/tr&gt;"
+                                "&lt;tr&gt;&lt;td&gt;USE&amp;nbsp;CAUTION"
+                                "&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"},
                 ]})
             return FakeResp({"data": [
                 {"lat": "39.19", "lon": "-76.0", "description": "MD 20",
@@ -214,10 +217,18 @@ async def test_wa_fetch_maps_alerts_cameras_passes(monkeypatch):
             return_value=httpx.Response(200, json=cams))
         respx.get(url__regex=r".*MountainPassConditions.*").mock(
             return_value=httpx.Response(200, json=passes))
+        respx.get(url__regex=r".*WeatherInformation.*").mock(
+            return_value=httpx.Response(200, json=[
+                {"StationName": "S 144th St", "Latitude": 47.47,
+                 "Longitude": -122.27, "TemperatureInFahrenheit": 59.0,
+                 "WindGustSpeedInMPH": 12}]))
         async with httpx.AsyncClient() as client:
             out = await states._fetch_wa(client)
     kinds = sorted(m["kind"] for m in out["markers"])
-    assert kinds == ["camera", "chain_control", "incident", "lane_closure"]
+    assert kinds == ["camera", "chain_control", "incident", "lane_closure",
+                     "rwis"]
+    wx = next(m for m in out["markers"] if m["kind"] == "rwis")
+    assert wx["air_c"] == 15.0 and wx["gust"] == 12
     clo = next(m for m in out["markers"] if m["kind"] == "lane_closure")
     assert clo["cls"] == "full-roadway"
     # No road geometry from WSDOT, so no stretch: a straight begin-to-end
