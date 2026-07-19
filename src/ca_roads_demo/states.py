@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html as _html
 import re
 import time
 from base64 import b64decode
@@ -418,12 +419,13 @@ def _oh_key() -> str:
 async def _fetch_wa(client) -> dict:
     key = _wa_key()
     base = "https://wsdot.wa.gov/Traffic/api"
-    alerts, cams, passes = [
+    alerts, cams, passes, weather = [
         (await client.get(u, headers=UA, timeout=30.0)).json()
         for u in (
             f"{base}/HighwayAlerts/HighwayAlertsREST.svc/GetAlertsAsJson?AccessCode={key}",
             f"{base}/HighwayCameras/HighwayCamerasREST.svc/GetCamerasAsJson?AccessCode={key}",
             f"{base}/MountainPassConditions/MountainPassConditionsREST.svc/GetMountainPassConditionsAsJson?AccessCode={key}",
+            f"{base}/WeatherInformation/WeatherInformationREST.svc/GetCurrentWeatherInformationAsJson?AccessCode={key}",
         )
     ]
     markers: list[dict] = []
@@ -487,6 +489,20 @@ async def _fetch_wa(client) -> dict:
             "label": "; ".join(active)[:220], "src": "WSDOT",
             "updated": None,
         })
+    for w in weather or []:
+        lat, lon = w.get("Latitude"), w.get("Longitude")
+        if not lat or not lon:
+            continue
+        temp_f = w.get("TemperatureInFahrenheit")
+        markers.append({
+            "kind": "rwis", "lat": lat, "lon": lon,
+            "station": w.get("StationName") or "Weather station",
+            "route": None, "src": "WSDOT",
+            "air_c": round((temp_f - 32) * 5 / 9, 1)
+            if isinstance(temp_f, (int, float)) else None,
+            "pave_c": None, "wind": None,
+            "gust": w.get("WindGustSpeedInMPH"), "vis_m": None,
+        })
     return {"markers": markers}
 
 
@@ -523,9 +539,17 @@ async def _fetch_or(client) -> dict:
                 "delay_min": None, "since": None, "until": None,
             })
         else:
+            # Derive a display type from the headline so out-of-state
+            # incidents classify into the same map buckets as CHP's.
+            low = headline.lower()
+            kind_label = ("Crash" if "crash" in low or "collision" in low
+                          else "Fire" if "fire" in low
+                          else "Hazard" if "debris" in low or "hazard" in low
+                          else "Closure" if "closed" in low or "closure" in low
+                          else "Incident")
             markers.append({
                 "kind": "incident", "lat": lat, "lon": lon,
-                "type": "Incident", "location": where or headline[:120],
+                "type": kind_label, "location": where or headline[:120],
                 "area": "", "src": "Oregon DOT (TripCheck)",
                 "dir": loc.get("direction") or None,
                 "reported": i.get("update-time"), "detail": headline,
@@ -569,9 +593,12 @@ async def _fetch_oh(client) -> dict:
             desc = (r.get("description") or "")[:250]
             if default_kind == "lane_closure" \
                     or (r.get("category") or "") == "Road Work":
+                is_ramp = desc.lower().startswith("ramp") \
+                    or " ramp " in desc.lower()[:60]
                 markers.append({
                     "kind": "lane_closure", "lat": lat, "lon": lon,
-                    "label": desc, "cls": "full-roadway"
+                    "label": desc,
+                    "cls": "ramp" if is_ramp else "full-roadway"
                     if "closed" in (r.get("roadStatus") or "").lower()
                     else "lane",
                     "route": r.get("routeName") or "", "county": None,
@@ -604,6 +631,24 @@ async def _fetch_oh(client) -> dict:
             "image": (views[0] or {}).get("largeUrl")
                      or (views[0] or {}).get("smallUrl"),
             "stream": None,
+        })
+    wx = (await client.get(f"{base}/weather-sensor-sites?page-all=true",
+                           headers=hdr, timeout=30.0)).json()
+    for w in (wx.get("results") or []):
+        lat, lon = w.get("latitude"), w.get("longitude")
+        if not lat or not lon:
+            continue
+        temp = w.get("averageAirTemperature")
+        try:
+            air_c = round((float(temp) - 32) * 5 / 9, 1)
+        except (TypeError, ValueError):
+            air_c = None
+        markers.append({
+            "kind": "rwis", "lat": float(lat), "lon": float(lon),
+            "station": w.get("location") or "Weather station",
+            "route": None, "src": "OHGO",
+            "air_c": air_c, "pave_c": None, "wind": None,
+            "gust": None, "vis_m": None,
         })
     for s in (dms.get("results") or []):
         lat, lon = s.get("latitude"), s.get("longitude")
@@ -715,8 +760,12 @@ async def _fetch_md(client) -> dict:
         lat, lon = s.get("lat"), s.get("lon")
         if not lat or not lon or (s.get("commMode") or "") != "ONLINE":
             continue
-        text = _TAG_RE.sub(" / ", s.get("msgHTML") or "")
-        lines = [ln.strip() for ln in text.split("/") if ln.strip()][:6]
+        # msgHTML arrives entity-ESCAPED (&lt;table&gt;...): unescape
+        # first or the tag stripper sees no tags and popups render soup.
+        raw = _html.unescape(_html.unescape(s.get("msgHTML") or ""))
+        text = _TAG_RE.sub(" / ", raw).replace("\xa0", " ")
+        lines = [ln.strip() for ln in text.split("/")
+                 if ln.strip() and ln.strip() != "&"][:6]
         marker = {
             "kind": "sign", "lat": float(lat), "lon": float(lon),
             "route": None, "direction": None,
@@ -847,12 +896,55 @@ async def _fetch_mo_dms(client) -> dict:
     return {"markers": markers}
 
 
+WFIGS_QUERY_URL = (
+    "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/"
+    "WFIGS_Incident_Locations_Current/FeatureServer/0/query"
+)
+US_BOUNDS = (18.0, -170.0, 72.0, -60.0)
+
+
+async def _fetch_us_fires(client) -> dict:
+    """Active wildfires OUTSIDE California from the same national WFIGS
+    layer the CA feed queries (CA fires keep their richer pipeline with
+    CAL FIRE merge and perimeters, so exclude them here to avoid
+    duplicates). No mapped perimeters yet; popups say so honestly."""
+    resp = await client.get(WFIGS_QUERY_URL, headers=UA, timeout=25.0, params={
+        "where": "POOState<>'US-CA' AND IncidentTypeCategory='WF' "
+                 "AND ActiveFireCandidate=1",
+        "outFields": "IncidentName,IncidentSize,PercentContained,"
+                     "FireDiscoveryDateTime",
+        "returnGeometry": "true", "outSR": "4326", "f": "json",
+    })
+    resp.raise_for_status()
+    payload = resp.json()
+    if "error" in payload:
+        raise RuntimeError(f"WFIGS: {payload['error']}")
+    markers: list[dict] = []
+    for feat in payload.get("features") or []:
+        geom, attrs = feat.get("geometry") or {}, feat.get("attributes") or {}
+        lat, lon = geom.get("y"), geom.get("x")
+        if not lat or not lon:
+            continue
+        disc = attrs.get("FireDiscoveryDateTime")
+        markers.append({
+            "kind": "wildfire", "lat": lat, "lon": lon,
+            "name": attrs.get("IncidentName"),
+            "acres": attrs.get("IncidentSize"),
+            "contained": attrs.get("PercentContained"),
+            "discovered": (datetime.fromtimestamp(disc / 1000).isoformat()
+                           if isinstance(disc, (int, float)) else None),
+            "src": "WFIGS",
+        })
+    return {"markers": markers}
+
+
 KEYLESS_STATES = {
     # code: (display state, bounds, fetcher)
     "md": ("Maryland", MD_BOUNDS, _fetch_md),
     "il": ("Illinois", IL_BOUNDS, _fetch_il),
     "al": ("Alabama", AL_BOUNDS, _fetch_al),
     "mod": ("Missouri", MO_BOUNDS, _fetch_mo_dms),
+    "usf": ("Nationwide", US_BOUNDS, _fetch_us_fires),
 }
 
 
@@ -959,6 +1051,31 @@ def _status_entry(key: str, name: str, agency: str, state: str) -> dict:
     }
 
 
+def stat_counts() -> dict:
+    """Marker counts across every cached expansion feed, for the topbar
+    KPIs. Reads caches only; never triggers a fetch."""
+    kinds = {"incident": 0, "lane_closure": 0, "chain_control": 0,
+             "wildfire": 0, "camera": 0, "sign": 0}
+    for entry in list(_cache._entries.values()):  # noqa: SLF001 - read-only peek
+        try:
+            for m in entry.value["markers"]:
+                if m.get("kind") in kinds:
+                    kinds[m["kind"]] += 1
+        except Exception:  # noqa: BLE001 - stats never break the page
+            continue
+    return kinds
+
+
+def coverage_summary() -> dict:
+    """How many sources and states are live right now (topbar text)."""
+    entries = source_status()
+    states_set = {e["state"] for e in entries if e.get("state")
+                  not in (None, "Nationwide")}
+    states_set.update({"California", "Nevada"})
+    return {"sources": len(entries) + 7,   # + the CA core feeds
+            "states": len(states_set)}
+
+
 def source_status() -> list[dict]:
     """Entries for /api/sources describing the expansion states, grouped
     per state. Reports cache state without forcing a fetch."""
@@ -974,7 +1091,8 @@ def source_status() -> list[dict]:
                                  {"md": "MDOT CHART",
                                   "il": "TravelMidwest (IDOT)",
                                   "al": "ALGO Traffic (ALDOT)",
-                                  "mod": "MoDOT"}[code], st))
+                                  "mod": "MoDOT",
+                                  "usf": "WFIGS wildfires"}[code], st))
     for code, (name, _bounds, _fetcher, ready) in KEYED_STATES.items():
         if not ready():
             out.append({"name": "All feeds", "agency": name, "state": name,

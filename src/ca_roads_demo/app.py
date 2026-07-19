@@ -956,12 +956,17 @@ async def stats(request: Request):
         road.incidents(), road.lane_closures(), road.chain_controls(),
         road.wildfires(), road.cameras(),
     )
+    # Fold in the cached expansion-state feeds so the topbar reflects
+    # the whole product, not just California.
+    extra = states.stat_counts()
+    cov = states.coverage_summary()
     return JSONResponse({
-        "incidents": len(chp.records),
-        "closures": len(lcs.records),
-        "chain_controls": len(cc.records),
-        "wildfires": len(wf.records),
-        "cameras": len(cams.records),
+        "incidents": len(chp.records) + extra["incident"],
+        "closures": len(lcs.records) + extra["lane_closure"],
+        "chain_controls": len(cc.records) + extra["chain_control"],
+        "wildfires": len(wf.records) + extra["wildfire"],
+        "cameras": len(cams.records) + extra["camera"],
+        "sources": cov["sources"], "states": cov["states"],
     })
 
 

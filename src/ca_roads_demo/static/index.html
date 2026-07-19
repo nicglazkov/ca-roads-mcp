@@ -4,24 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1f33">
-<title>CommuteScout - live California road conditions, traffic map, and route planner</title>
-<meta name="description" content="Live California traffic map and route planner: CHP incidents, Caltrans lane closures, chain controls, wildfires, live highway cameras, and message signs. Plan a route or ask about a drive in plain words.">
+<title>CommuteScout - live road conditions, traffic map, and route planner</title>
+<meta name="description" content="Live traffic map and route planner across 23 states: incidents, lane closures, chain controls, wildfires, live highway cameras, and message signs from official DOT feeds. Deepest coverage in California.">
 <link rel="canonical" href="https://commutescout.com/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="CommuteScout - live California road conditions">
-<meta property="og:description" content="Every incident, closure, chain control, wildfire, live camera, and message sign in California on one map. Plan a route or ask an assistant about your drive.">
+<meta property="og:title" content="CommuteScout - live road conditions across 23 states">
+<meta property="og:description" content="Incidents, closures, chain controls, wildfires, live cameras, and message signs from official DOT feeds on one map. Plan a route or ask an assistant about your drive.">
 <meta property="og:url" content="https://commutescout.com/">
 <meta property="og:image" content="https://commutescout.com/static/shots/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="CommuteScout - live California road conditions">
-<meta name="twitter:description" content="Live traffic map, route planner, and AI assistant for California roads.">
+<meta name="twitter:title" content="CommuteScout - live road conditions across 23 states">
+<meta name="twitter:description" content="Live traffic map, route planner, and AI assistant for US roads.">
 <meta name="twitter:image" content="https://commutescout.com/static/shots/og.png">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebApplication",
  "name":"CommuteScout","applicationCategory":"TravelApplication",
  "operatingSystem":"Web",
  "url":"https://commutescout.com/",
- "description":"Live California road conditions: CHP incidents, Caltrans closures, chain controls, wildfires, cameras, and message signs on a map, with a route planner and an AI assistant.",
+ "description":"Live road conditions across 23 states: incidents, closures, chain controls, wildfires, cameras, and message signs from official DOT feeds on a map, with a route planner and an AI assistant.",
  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
 </script>
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
@@ -249,7 +249,13 @@ aside { background:var(--card); border-right:1px solid var(--line);
 .sysok { cursor:pointer }
 .srcpanel { position:fixed; z-index:1200; top:60px; right:12px; width:300px;
   background:var(--card); border:1px solid var(--line); border-radius:12px;
-  box-shadow:0 12px 34px rgba(15,28,43,.22); padding:12px 14px }
+  box-shadow:0 12px 34px rgba(15,28,43,.22); padding:12px 14px;
+  max-height:calc(100vh - 84px); overflow-y:auto }
+.allnone { display:block; margin:6px 0 2px; font:600 .7rem Inter;
+  color:var(--sky); background:none; border:1px solid var(--line);
+  border-radius:7px; padding:3px 9px; cursor:pointer }
+.allnone:hover { border-color:var(--sky) }
+.nocov { cursor:pointer }
 .srcpanel h4 { font-size:.8rem; margin-bottom:2px }
 .srcpanel .sub { font-size:.68rem; color:var(--dim); margin-bottom:8px }
 .srcpanel .src { display:flex; align-items:center; gap:8px; padding:4px 0;
@@ -459,6 +465,7 @@ aside { background:var(--card); border-right:1px solid var(--line);
   <div><b id="k-cc">–</b>chain controls</div>
   <div><b id="k-wf">–</b>wildfires tracked</div>
   <div><b id="k-cam">–</b>cameras online</div>
+  <div><b id="k-st">–</b>states covered</div>
 </div>
 <div class="shell">
   <aside>
@@ -510,23 +517,16 @@ aside { background:var(--card); border-right:1px solid var(--line);
         <h3>Ask about your drive</h3>
         <p>Type a question the way you'd say it out loud. An assistant reads
         the live feeds above and answers in a few seconds - nothing to
-        install or sign up for.</p>
+        install or sign up for. Answers currently cover California routes;
+        more states are coming.</p>
       </div>
     <form id="form">
       <div class="searchrow">
         <input type="text" id="q" maxlength="300" required autocomplete="off"
-               placeholder="How's the drive from Sacramento to Tahoe?">
+               placeholder="How's my drive looking right now?">
         <button class="ask" id="go" type="submit">Check</button>
       </div>
     </form>
-    <div class="examples">
-      <button type="button">Is 17 clear right now?</button>
-      <button type="button">How is northbound 101 up to SF?</button>
-      <button type="button">Anything on I-80 between Sacramento and Reno?</button>
-      <button type="button">What are the busiest routes right now?</button>
-      <button type="button">Any fires near I-5?</button>
-      <button type="button">Lane closures on 101 in the Bay Area?</button>
-    </div>
     <div class="result" id="result">
       <div class="answer-card">
         <div class="loader" id="loader">
@@ -547,10 +547,11 @@ aside { background:var(--card); border-right:1px solid var(--line);
     </div>
     </section>
     <p class="legalfoot">
-      Data: CHP, Caltrans, WFIGS, CAL FIRE, NWS, USGS, TomTom, 511 SF Bay. Independent
+      Data: CHP, Caltrans, WFIGS, CAL FIRE, NWS, USGS, TomTom, 511 SF Bay,
+      and the state DOT and 511 services listed in the data-sources panel
+      (including data powered by 511NY and TravelMidwest). Independent
       service, not affiliated with any agency. Conditions change fast; verify
-      before you drive (511 or
-      <a href="https://quickmap.dot.ca.gov">quickmap.dot.ca.gov</a>).
+      before you drive (511 or your state DOT).
       Questions are logged anonymously to improve answers. Traffic is
       measured with cookieless Cloudflare Web Analytics.
       Map tiles come from CARTO; the route preview and place lookup use the
@@ -568,6 +569,7 @@ aside { background:var(--card); border-right:1px solid var(--line);
     <button type="button" class="layersbtn" id="layersbtn">Layers</button>
   <div class="filters" id="filters">
       <b>Show on map</b>
+      <button type="button" id="allnone" class="allnone">Show all / none</button>
       <u>Incidents</u>
       <label><input type="checkbox" data-group="inc_collision" checked><i style="--dot:#c9611a"></i>Collisions <em id="n-inc_collision"></em></label>
       <label><input type="checkbox" data-group="inc_fire" checked><i style="--dot:#c9611a"></i>Fire reports <em id="n-inc_fire"></em></label>
@@ -1000,7 +1002,11 @@ fetch('/api/stats').then(r => r.json()).then(s => {
   };
   put('k-inc', s.incidents); put('k-clo', s.closures);
   put('k-cc', s.chain_controls); put('k-wf', s.wildfires);
-  put('k-cam', s.cameras);
+  put('k-cam', s.cameras); put('k-st', s.states);
+  if (s.sources && s.states) {
+    document.getElementById('feedsok').textContent =
+      'live from ' + s.sources + ' sources · ' + s.states + ' states';
+  }
 }).catch(() => {});
 
 fetch('/health').then(r => r.json()).then(d => {
@@ -1624,6 +1630,46 @@ document.querySelectorAll('#filters input[data-group]').forEach(box => {
     const layer = ambient[box.dataset.group];
     if (box.checked) map.addLayer(layer); else map.removeLayer(layer);
   });
+});
+document.getElementById('allnone').addEventListener('click', () => {
+  const boxes = [...document.querySelectorAll('#filters input[data-group]')];
+  const turnOn = boxes.some((b) => !b.checked);
+  for (const b of boxes) {
+    if (b.checked !== turnOn) {
+      b.checked = turnOn;
+      b.dispatchEvent(new Event('change'));
+    }
+  }
+});
+
+// States without coverage yet get a gray outline that says so.
+const COVERED = new Set(['California', 'Nevada', 'Maine', 'New Hampshire',
+  'Vermont', 'Iowa', 'North Carolina', 'Washington', 'Oregon', 'Ohio',
+  'Utah', 'Arizona', 'Idaho', 'Wisconsin', 'New York', 'Indiana',
+  'Minnesota', 'Kansas', 'New Jersey', 'Maryland', 'Missouri',
+  'Illinois', 'Alabama']);
+// rIC takes an options dict, not a delay: passing a number throws a
+// synchronous TypeError in Chromium and kills every handler below.
+const idle = (cb) => window.requestIdleCallback
+  ? requestIdleCallback(cb, { timeout: 1500 }) : setTimeout(cb, 1200);
+idle(async () => {
+  try {
+    const res = await fetch('/static/us-states.json');
+    if (!res.ok) return;
+    const geo = await res.json();
+    const missing = { type: 'FeatureCollection',
+      features: geo.features.filter((f) => !COVERED.has(f.properties.NAME)) };
+    L.geoJSON(missing, {
+      style: { color: '#8b98a7', weight: 1, dashArray: '4 5',
+        fillColor: '#8b98a7', fillOpacity: 0.10, interactive: true,
+        className: 'nocov' },
+      onEachFeature: (f, layer) => layer.bindPopup(
+        '<div class="pop"><div class="t">' + esc(f.properties.NAME) +
+        '</div><div class="d">Sorry, ' + esc(f.properties.NAME) +
+        ' is not supported yet. Road data for this state is coming as ' +
+        'its feeds come online.</div></div>', { maxWidth: 260 }),
+    }).addTo(map);
+  } catch (e) { /* cosmetic layer; ignore */ }
 });
 document.getElementById('camvideo').addEventListener('change', rebuildCameras);
 
@@ -2758,6 +2804,15 @@ function buildRouteAsks() {
   clearPickMarks();  // the planned route now carries its own markers
   const wrap = document.getElementById('routeasks');
   wrap.innerHTML = '';
+  // The assistant's tools cover California; suggesting questions about
+  // an Ohio route would produce confidently wrong answers.
+  const mid = plannedRoute.route.latlngs[
+    Math.floor(plannedRoute.route.latlngs.length / 2)];
+  const inCA = mid[0] >= 32.0 && mid[0] <= 42.5
+    && mid[1] >= -125.0 && mid[1] <= -113.5;
+  const wrapOuter = document.getElementById('routeasks-wrap');
+  if (!inCA) { if (wrapOuter) wrapOuter.style.display = 'none'; return; }
+  if (wrapOuter) wrapOuter.style.display = '';
   const a = plannedRoute.fromName.split(',')[0];
   const b = plannedRoute.toName.split(',')[0];
   const fromMe = a === 'My location';
