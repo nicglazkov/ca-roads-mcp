@@ -1547,6 +1547,6 @@ def source_status() -> list[dict]:
                         "enabled": False})
             continue
         agency = {"wa": "WSDOT", "or": "Oregon DOT (TripCheck)",
-                  "oh": "OHGO"}[code]
+                  "oh": "OHGO", "utk": "UDOT"}.get(code, name)
         out.append(_status_entry(f"{code}:all", "All feeds", agency, name))
     return out

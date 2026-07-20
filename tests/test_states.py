@@ -546,3 +546,18 @@ async def test_ut_travel_iq_full_coverage(monkeypatch):
     assert states._wzdx_superseded("ut") is True
     monkeypatch.delenv("UT511_API_KEY")
     assert states._wzdx_superseded("ut") is False
+
+
+def test_source_status_covers_every_keyed_registry_entry(monkeypatch):
+    # Prod-only crash regression: adding a KEYED_STATES entry without
+    # its status label raised KeyError in coverage_summary, 500ing
+    # /api/stats, but only when the key env var was actually set.
+    for var in ("WSDOT_API_KEY", "TRIPCHECK_API_KEY", "OHGO_API_KEY",
+                "UT511_API_KEY"):
+        monkeypatch.setenv(var, "k")
+    entries = states.source_status()
+    named = {e["state"] for e in entries}
+    for _code, (name, _b, _f, _r) in states.KEYED_STATES.items():
+        assert name in named
+    cov = states.coverage_summary()
+    assert cov["states"] >= 30 and cov["sources"] >= 35
