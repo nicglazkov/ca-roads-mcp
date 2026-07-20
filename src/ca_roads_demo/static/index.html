@@ -156,6 +156,17 @@ aside { background:var(--card); border-right:1px solid var(--line);
 /* ── Map area ───────────────────────────────────────────────── */
 .map-card { position:relative; min-height:0 }
 #map { position:absolute; inset:0 }
+.maploading { position:absolute; left:50%; transform:translateX(-50%);
+  bottom:18px; background:rgba(11,31,51,.92); color:#e9eef5;
+  font-size:.85rem; padding:8px 16px; border-radius:999px; display:flex;
+  align-items:center; gap:9px; z-index:800; pointer-events:none;
+  box-shadow:0 4px 14px rgba(0,0,0,.25); transition:opacity .35s;
+  max-width:88%; white-space:nowrap; overflow:hidden }
+.maploading.gone { opacity:0 }
+.maploading i { flex:none; width:12px; height:12px; border-radius:50%;
+  border:2px solid #7fb1f9; border-top-color:transparent;
+  animation:mlspin .8s linear infinite }
+@keyframes mlspin { to { transform:rotate(360deg) } }
 .roadinfo { position:absolute; z-index:800; left:14px; bottom:14px;
   background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:10px;
   padding:7px 13px; font-size:.78rem; color:var(--ink);
@@ -570,6 +581,7 @@ aside { background:var(--card); border-right:1px solid var(--line);
   </aside>
   <div class="map-card active" id="mapcard">
     <div id="map"></div>
+    <div class="maploading" id="maploading"><i></i><span id="maploadingtext">Loading live road data&hellip;</span></div>
     <div class="pickhint" id="pickhint" hidden></div>
     <div class="roadinfo" id="roadinfo"></div>
     <button type="button" class="layersbtn" id="layersbtn">Layers</button>
@@ -1645,6 +1657,33 @@ function renderBatch(markers, groups) {
   }
 }
 
+// Loading pill: visible from page load until the first batch of dots
+// lands, with honest escalation text on slow loads and an automatic
+// backoff retry on failure (previously a failed first fetch left a
+// silently empty map for up to 3 minutes until the interval refresh).
+const mapLoadingEl = document.getElementById('maploading');
+const mapLoadingText = document.getElementById('maploadingtext');
+let mapDataShown = false;
+let mapRetryDelay = 4000;
+function mapLoadingDone() {
+  if (mapDataShown) return;
+  mapDataShown = true;
+  mapLoadingEl.classList.add('gone');
+  setTimeout(() => mapLoadingEl.remove(), 450);
+}
+setTimeout(() => {
+  if (!mapDataShown) {
+    mapLoadingText.textContent =
+      'Still loading - waking up the live data feeds…';
+  }
+}, 6000);
+setTimeout(() => {
+  if (!mapDataShown) {
+    mapLoadingText.textContent =
+      'Almost there - gathering reports from 40+ live sources…';
+  }
+}, 20000);
+
 async function refreshAmbient(force) {
   const view = map.getBounds();
   if (!force && ambientBounds && ambientBounds.contains(view)) return;
@@ -1663,20 +1702,33 @@ async function refreshAmbient(force) {
   const bbox = [sw.lat, sw.lng, ne.lat, ne.lng].map(v => v.toFixed(3)).join(',');
   // Two phases: the fast feeds paint in ~a quarter second; the heavy ones
   // (3,300 cameras, 970 signs) follow without holding them up.
-  const load = async (kinds, groups) => {
+  const load = async (kinds, groups, isFast) => {
     try {
       const res = await fetch('/api/mapdata?bbox=' + bbox + '&kinds=' + kinds);
-      if (!res.ok || mine !== ambientCycle) return;
+      if (mine !== ambientCycle) return true;
+      if (!res.ok) return false;
       const data = await res.json();
-      if (mine !== ambientCycle) return;
+      if (mine !== ambientCycle) return true;
       renderBatch(data.markers || [], groups);
-    } catch (e) { /* transient; next pan retries */ }
+      if (isFast) mapLoadingDone();
+      return true;
+    } catch (e) { return false; }
   };
-  await Promise.all([
-    load('incident,closure,chain,fire', FAST_GROUPS),
-    load('camera,sign,rwis', HEAVY_GROUPS),
+  const [fastOk, heavyOk] = await Promise.all([
+    load('incident,closure,chain,fire', FAST_GROUPS, true),
+    load('camera,sign,rwis', HEAVY_GROUPS, false),
   ]);
-  if (mine === ambientCycle) ambientBounds = fetchBounds;
+  if (mine !== ambientCycle) return;
+  if (fastOk && heavyOk) {
+    ambientBounds = fetchBounds;
+    mapRetryDelay = 4000;
+  } else if (!mapDataShown) {
+    // The page is useless without the first batch: keep retrying with
+    // backoff instead of sitting blank until the 3-minute refresh.
+    mapLoadingText.textContent = 'Connection hiccup - retrying…';
+    setTimeout(() => refreshAmbient(true), mapRetryDelay);
+    mapRetryDelay = Math.min(mapRetryDelay * 2, 30000);
+  }
 }
 map.on('moveend zoomend', () => {
   clearTimeout(ambientTimer);
