@@ -1295,7 +1295,7 @@ class SecurityHeaders:
         "https://atmsqf.iowadot.gov "
         "https://www.udottraffic.utah.gov https://az511.com "
         "https://az511.gov https://511.alaska.gov "
-        "https://images-dis.divas.cloud; "
+        "https://images-dis.divas.cloud https://511.idaho.gov; "
         "connect-src 'self' https://router.project-osrm.org "
         "https://valhalla1.openstreetmap.de https://*.googleapis.com "
         "https://*.google.com https://cloudflareinsights.com "

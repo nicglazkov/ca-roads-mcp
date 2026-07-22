@@ -435,6 +435,10 @@ TRAVELIQ = {
             "AZ511_API_KEY", "ADOT"),
     "akk": ("Alaska", (54.5, -170.0, 71.5, -129.9),
             "https://511.alaska.gov", "AK511_API_KEY", "Alaska DOT&PF"),
+    "ctk": ("Connecticut", (40.9, -73.8, 42.1, -71.7),
+            "https://ctroads.org", "CT511_API_KEY", "CTDOT"),
+    "idk": ("Idaho", (41.9, -117.3, 49.1, -111.0),
+            "https://511.idaho.gov", "ID511_API_KEY", "ITD"),
 }
 
 
@@ -461,6 +465,11 @@ async def _fetch_traveliq(client, code: str) -> dict:
     async def get(res):
         r = await client.get(f"{base}/{res}", headers=UA, timeout=30.0,
                              params={"key": key, "format": "json"})
+        # Not every Travel-IQ state exposes every resource (CT has no
+        # camera or weather endpoint); a 404 is an empty list, not an
+        # outage.
+        if r.status_code == 404:
+            return []
         r.raise_for_status()
         return r.json() or []
 
@@ -1084,7 +1093,7 @@ for _c in TRAVELIQ:
 
 # A ready keyed state replaces its WZDx-only feed so roadwork is not
 # drawn twice. keyed code -> wzdx code.
-SUPERSEDES = {"utk": "ut", "azk": "az"}
+SUPERSEDES = {"utk": "ut", "azk": "az", "idk": "id"}
 
 
 def _wzdx_superseded(wzdx_code: str) -> bool:
@@ -1942,6 +1951,7 @@ def source_status() -> list[dict]:
         agency = {"wa": "WSDOT", "or": "Oregon DOT (TripCheck)",
                   "oh": "OHGO", "utk": "UDOT", "azk": "ADOT",
                   "akk": "Alaska DOT&PF", "cok": "CDOT",
-                  "vak": "VDOT SmarterRoads"}.get(code, name)
+                  "vak": "VDOT SmarterRoads", "ctk": "CTDOT",
+                  "idk": "ITD"}.get(code, name)
         out.append(_status_entry(f"{code}:all", "All feeds", agency, name))
     return out
