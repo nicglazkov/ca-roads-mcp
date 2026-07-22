@@ -30,7 +30,8 @@ state's WZDx roadwork feed.
 | Colorado | Y | Y | - (23) | Y | Y | - (22) | Y* |
 | Florida | Y | Y | Y | Y | - (24) | n/a | Y* |
 | Virginia | Y | Y (wz) | - (25) | Y | Y | n/a | Y* |
-| Idaho | - (11) | Y (wz) | - (11) | - (11) | - (11) | - (11) | Y* |
+| Idaho | Y | Y | Y | Y | Y | - (22) | Y* |
+| Connecticut | Y | Y | - (26) | Y | - (26) | n/a | Y* |
 | Wisconsin | - (11) | Y (wz) | Y** | - (11) | - (11) | n/a | Y* |
 | New York | - (11) | Y (wz) | - (11) | - (11) | - (11) | n/a | Y* |
 | Indiana | - (12) | Y (wz) | Y** | - (12) | - (12) | n/a | Y* |
@@ -90,10 +91,11 @@ state.
 10. **NC beyond closures**: DriveNC's full API needs the key Nic
     holds, but its endpoint paths are only documented inside their SPA;
     discovery pending.
-11. **Travel-IQ states (ID, WI, NY)**: full incidents, cameras,
-    signs, and weather exist behind the free developer key; requests
-    are submitted and each state upgrades the moment its key arrives
-    (Utah, Arizona, and Alaska upgraded this way).
+11. **Travel-IQ states (WI, NY)**: full incidents, cameras, signs,
+    and weather exist behind the free developer key; requests are
+    submitted and each state upgrades the moment its key arrives
+    (Utah, Arizona, Alaska, Idaho, and Connecticut upgraded this
+    way).
 12. **IN, KS**: full data is in the credentialed Castle Rock CARS
     feeds (request-form access).
 13. **MN**: metro-area IRIS XML dumps (incidents, signs, RWIS,
@@ -134,3 +136,6 @@ state.
 25. **VA cameras**: SmarterRoads has no camera dataset; VDOT 511
     video access is a separate free program (email
     511_videosubscription@iteris.com).
+26. **CT cameras and weather**: CTDOT's developer API publishes no
+    camera or weather-station resources (404 by design); their site's
+    internal camera feed is unlicensed.
