@@ -245,6 +245,9 @@ aside { background:var(--card); border-right:1px solid var(--line);
   white-space:nowrap }
 .pop .dets h5 { font:600 .64rem Inter; text-transform:uppercase;
   letter-spacing:.5px; color:var(--dim); margin:7px 0 2px }
+/* Explanations REPLACE the raw scanner shorthand instead of doubling
+   every row: raw hides when its translated twin shows. */
+.pop .dets.explained .drow.hasxl .rw { display:none }
 .pop .dets .xl { display:none; color:var(--dim); font-size:.68rem;
   padding-left:10px; border-left:2px solid var(--sky-soft) }
 .pop .dets.explained .xl { display:block }
@@ -2062,8 +2065,9 @@ map.on('popupopen', (e) => {
         .sort((x, y) => y[1] - x[1])
         .map(([en]) => {
           const xl = explainLine(en[1] || '');
-          return '<div class="drow"><b>' + esc(en[0] || '') + '</b>' +
-            esc(en[1] || '') +
+          return '<div class="drow' + (xl ? ' hasxl' : '') + '"><b>' +
+            esc(en[0] || '') + '</b>' +
+            '<span class="rw">' + esc(en[1] || '') + '</span>' +
             (xl ? '<span class="xl">' + esc(xl) + '</span>' : '') +
             '</div>';
         }).join('');
@@ -2077,6 +2081,12 @@ map.on('popupopen', (e) => {
       // string and would wipe this injected log (same rule as
       // appendMeasured above). The .dets box scrolls within max-height.
       box.innerHTML = h || '<div class="drow">No shared entries yet.</div>';
+      // A timeline reads badly at 320px: widen the popup while the log
+      // is open (styling only; popup.update() would wipe the log).
+      const cw = el.querySelector('.leaflet-popup-content');
+      if (cw && h) {
+        cw.style.width = Math.min(500, window.innerWidth - 70) + 'px';
+      }
       if (h) {
         const xb = document.createElement('button');
         xb.type = 'button'; xb.className = 'xbtn';

@@ -811,7 +811,9 @@ async def api_watch_test(request: Request) -> JSONResponse:
     sent = await _push_to_subs(subs, {
         "title": "CommuteScout test alert",
         "body": "Push notifications are working for your account.",
-        "url": "/watch",
+        # Absolute: relative URLs resolve against the origin the device
+        # subscribed on, which for early users is the bare run.app host.
+        "url": f"{DEMO_URL}/watch",
     })
     return JSONResponse({"sent": sent, "devices": len(subs)})
 
@@ -1266,9 +1268,13 @@ async def run_check_cycle() -> dict:
                 title = f"{watch.get('name', 'Watch')}: {event['title']}"
                 if watch.get("channels", {}).get("push", True):
                     subs = await push_subs_for(uid)
+                    lat, lon = event.get("lat"), event.get("lon")
+                    click = (f"{DEMO_URL}/?focus={lat:.5f},{lon:.5f}"
+                             f"&k={event.get('kind', 'incident')}"
+                             if lat and lon else f"{DEMO_URL}/watch")
                     stats["pushes"] += await _push_to_subs(subs, {
                         "title": title, "body": event["body"],
-                        "url": "/watch",
+                        "url": click,
                     })
             # One email per watch per cycle: pushes are per event, but a
             # busy cycle as eight separate emails reads as spam.

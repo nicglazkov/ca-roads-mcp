@@ -23,7 +23,7 @@ state's WZDx roadwork feed.
 | Alabama | - (7) | - (7) | Y | - (7) | - (7) | n/a | Y* |
 | Missouri | - (8) | Y (wz) | - (8) | Y | - (8) | n/a | Y* |
 | Iowa | - (9) | Y (wz) | - (9) | - (9) | - (9) | n/a | Y* |
-| North Carolina | - (10) | Y (wz) | - (10) | - (10) | - (10) | n/a | Y* |
+| North Carolina | Y | Y | Y | Y | - (27) | n/a | Y* |
 | Utah | Y | Y | Y | Y | Y | - (22) | Y* |
 | Arizona | Y | Y | Y | Y | Y | n/a | Y* |
 | Alaska | Y | Y | Y | Y | Y | - (22) | Y* |
@@ -43,11 +43,11 @@ state's WZDx roadwork feed.
 | Hawaii | - (17) | Y (wz) | - (17) | - (17) | - (17) | n/a | Y* |
 | Louisiana | - (17) | Y (wz) | - (17) | - (17) | - (17) | n/a | Y* |
 | Delaware | Y | Y (wz) | - (18) | Y | Y | n/a | Y* |
-| Michigan | Y | Y | - (19) | - (19) | - (19) | n/a | Y* |
+| Michigan | Y | Y | Y | - (19) | - (19) | n/a | Y* |
 | Tennessee | Y | Y | - (20) | - (20) | - (20) | n/a | Y* |
 | Mississippi | Y | Y | - (21) | - (21) | - (21) | n/a | Y* |
 | Texas (Austin metro) | - (16) | Y (wz) | - (16) | - (16) | - (16) | n/a | Y* |
-| Nevada | traffic flow continuations only (15) | | | | | | Y* |
+| Nevada | Y | Y | Y | Y | Y | n/a | Y* |
 
 `Y*` Wildfires come from the national WFIGS interagency layer, so
 every state has active-fire dots, and fires with a mapped perimeter in
@@ -88,9 +88,8 @@ state.
 9. **IA beyond closures**: the documented feeds behind Iowa 511
    (incidents, cameras with stills, DMS, RWIS) sit behind the
    credentialed CARS XML hub; the keyless path is WZDx only.
-10. **NC beyond closures**: DriveNC's full API needs the key Nic
-    holds, but its endpoint paths are only documented inside their SPA;
-    discovery pending.
+10. (resolved in v2.38.0: DriveNC relaunched on Travel-IQ in May 2026
+    and the held key unlocks the standard endpoints.)
 11. **Travel-IQ states (WI, NY)**: full incidents, cameras, signs,
     and weather exist behind the free developer key; requests are
     submitted and each state upgrades the moment its key arrives
@@ -103,9 +102,7 @@ state.
     needs the CARS credential.
 14. **NJ**: events live in the TRANSCOM XCM exchange (free
     registration, commercial-friendly); cameras have no public feed.
-15. **NV**: the nvroads key unlocks the full Travel-IQ dataset; the
-    integration predates the multi-state layer and currently feeds the
-    route-flow features. Uplift to full map coverage is queued.
+15. **NV**: fully covered since v2.38.0 (Travel-IQ key).
 16. **TX**: TxDOT's statewide feed terms prohibit third-party reuse,
     so only the City of Austin's CC0 open-data roadwork feed ships
     (Austin metro coverage).
@@ -116,9 +113,9 @@ state.
     the TravelMidwest aggregation.
 18. **DE cameras**: DelDOT publishes HLS video streams with no still
     URL; snapshot popups need stream support first.
-19. **MI cameras, signs, weather**: MiDrive's camera list carries no
-    still image URL and its sign list no message text (both need
-    per-item detail calls); no RWIS feed exists.
+19. **MI signs, weather**: MiDrive's sign list carries no message
+    text in any bulk feed; no RWIS feed exists. (Cameras solved in
+    v2.38.0 via the bulk list's embedded image URLs.)
 20. **TN beyond events**: cameras, live sign text, and roadway weather
     sit behind SmartWay's embedded site key, which TDOT could rotate
     at any time; the keyless ArcGIS events layer ships instead. A
@@ -139,3 +136,7 @@ state.
 26. **CT cameras and weather**: CTDOT's developer API publishes no
     camera or weather-station resources (404 by design); their site's
     internal camera feed is unlicensed.
+
+27. **NC road weather**: DriveNC's API has no weather-station
+    endpoint; its Snow and Ice road-conditions resource is seasonal
+    and queued for winter.

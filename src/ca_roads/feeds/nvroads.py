@@ -14,7 +14,7 @@ import time
 
 import httpx
 
-EVENTS_URL = "https://goto.nvroads.com/api/v2/get/event"
+EVENTS_URL = "https://www.nvroads.com/api/v2/get/event"
 TIMEOUT_SECONDS = 12.0
 TTL_SECONDS = 180.0
 
