@@ -362,9 +362,15 @@ def _parse_ia_wzdx(payload: dict, src: str = "Iowa DOT",
                 (since and since > now) or (until and until < now)):
             continue          # planned for later, or already done
         lat, lon = pts[0][1], pts[0][0]
+        roads = ", ".join(core.get("road_names") or [])
+        direction = (core.get("direction") or "").replace("-", " ")
+        # Some feeds (DelDOT, parts of Louisiana) omit descriptions:
+        # a dot with no text at all reads as an error, so build one.
+        fallback = " ".join(x for x in (roads, direction, "work zone")
+                            if x).strip()
         marker = {
             "kind": "lane_closure", "lat": lat, "lon": lon,
-            "label": (core.get("description") or "")[:250],
+            "label": (core.get("description") or fallback)[:250],
             "cls": _IMPACT_CLS.get(props.get("vehicle_impact"), "other"),
             "route": ", ".join(core.get("road_names") or [])[:60],
             "county": None, "src": src,
@@ -439,6 +445,12 @@ TRAVELIQ = {
             "https://ctroads.org", "CT511_API_KEY", "CTDOT"),
     "idk": ("Idaho", (41.9, -117.3, 49.1, -111.0),
             "https://511.idaho.gov", "ID511_API_KEY", "ITD"),
+    "nvk": ("Nevada", (35.0, -120.1, 42.1, -114.0),
+            "https://www.nvroads.com", "NV511_API_KEY", "NDOT"),
+    # DriveNC relaunched on Travel-IQ in May 2026; the old bespoke API
+    # is retired and the standard endpoints accept our existing key.
+    "nck": ("North Carolina", NC_BOUNDS,
+            "https://www.drivenc.gov", "NC511_API_KEY", "NCDOT"),
 }
 
 
@@ -1093,7 +1105,7 @@ for _c in TRAVELIQ:
 
 # A ready keyed state replaces its WZDx-only feed so roadwork is not
 # drawn twice. keyed code -> wzdx code.
-SUPERSEDES = {"utk": "ut", "azk": "az", "idk": "id"}
+SUPERSEDES = {"utk": "ut", "azk": "az", "idk": "id", "nck": "nc"}
 
 
 def _wzdx_superseded(wzdx_code: str) -> bool:
@@ -1355,17 +1367,45 @@ async def _fetch_mo_dms(client) -> dict:
     return {"markers": markers}
 
 
+_MI_ROW_ID = re.compile(r'id="(\d+)Img"')
+_MI_ROW_SRC = re.compile(r'src="(https://[^"]+)"')
+
+
 async def _fetch_mi(client) -> dict:
-    """Michigan MiDrive (keyless MDOT JSON): incidents plus roadwork
-    with real road geometry. Cameras carry no still URL and signs no
-    message text in the list feeds, so those wait for detail-call
-    support rather than shipping empty markers."""
+    """Michigan MiDrive (keyless MDOT JSON): incidents, roadwork with
+    real road geometry, and cameras. Camera stills come from the bulk
+    /camera/list rows (HTML-embedded image URLs, joined to the clean
+    AllForMap metadata by id); one request, not one per camera. Signs
+    still carry no message text in any bulk feed."""
     base = "https://mdotjboss.state.mi.us/MiDrive"
     inc = (await client.get(f"{base}/incidents/AllForMap/", headers=UA,
                             timeout=30.0)).json()
     con = (await client.get(f"{base}/construction/AllForMap/", headers=UA,
                             timeout=30.0)).json()
+    cam_meta, cam_rows = [], []
+    with contextlib.suppress(Exception):
+        cam_meta = (await client.get(f"{base}/camera/AllForMap/",
+                                     headers=UA, timeout=30.0)).json()
+        cam_rows = (await client.get(f"{base}/camera/list",
+                                     headers=UA, timeout=30.0)).json()
+    img_by_id: dict[str, str] = {}
+    for row in cam_rows or []:
+        blob = " ".join(str(v) for v in row.values() if isinstance(v, str))
+        rid = _MI_ROW_ID.search(blob)
+        src_m = _MI_ROW_SRC.search(blob)
+        if rid and src_m:
+            img_by_id[rid.group(1)] = _html.unescape(src_m.group(1))
     markers: list[dict] = []
+    for c in cam_meta or []:
+        lat, lon = c.get("latitude"), c.get("longitude")
+        url = img_by_id.get(str(c.get("id")))
+        if not lat or not lon or not url:
+            continue
+        markers.append({
+            "kind": "camera", "lat": lat, "lon": lon,
+            "name": c.get("title") or "Camera",
+            "route": None, "direction": None,
+            "near": c.get("title"), "image": url, "src": "MDOT MiDrive"})
     for e in inc or []:
         lat, lon = e.get("latitude"), e.get("longitude")
         if not lat or not lon:
@@ -1787,6 +1827,19 @@ KEYLESS_STATES = {
 }
 
 
+def _clean_marker_text(m: dict) -> None:
+    """Popup-facing text must never carry raw newlines, tabs, or HTML
+    tags: agencies embed them freely (a marker-text audit found them in
+    nine sources). Idempotent, applied at the serving boundary so every
+    adapter present and future is covered."""
+    for f in ("label", "name", "type", "near"):
+        v = m.get(f)
+        if isinstance(v, str) and v:
+            v2 = re.sub(r"\s+", " ", _TAG_RE.sub(" ", v)).strip()
+            if v2 != v:
+                m[f] = v2
+
+
 async def markers_for_bbox(client, box, want) -> list[dict]:
     """All out-of-state markers intersecting the viewport. Never raises:
     a failing state simply contributes nothing this cycle."""
@@ -1805,6 +1858,7 @@ async def markers_for_bbox(client, box, want) -> list[dict]:
                 if m.get("lat") and m.get("lon") \
                         and lat_min <= m["lat"] <= lat_max \
                         and lon_min <= m["lon"] <= lon_max:
+                    _clean_marker_text(m)
                     out.append(m)
 
     lookups = []
@@ -1952,6 +2006,7 @@ def source_status() -> list[dict]:
                   "oh": "OHGO", "utk": "UDOT", "azk": "ADOT",
                   "akk": "Alaska DOT&PF", "cok": "CDOT",
                   "vak": "VDOT SmarterRoads", "ctk": "CTDOT",
-                  "idk": "ITD"}.get(code, name)
+                  "idk": "ITD", "nvk": "NDOT",
+                  "nck": "NCDOT"}.get(code, name)
         out.append(_status_entry(f"{code}:all", "All feeds", agency, name))
     return out
