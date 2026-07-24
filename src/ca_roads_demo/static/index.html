@@ -2018,7 +2018,9 @@ function mapLoadingDone() {
     // response is obsolete and must not suppress later pill text.
     mapRefreshPrompt = false;
   }
-  hidePill();
+  // While the warm-up counter owns the pill, refreshes must not blink
+  // it off between polls; the warm loop hides it at completion.
+  if (!warmPill) hidePill();
 }
 // After 5 seconds WITHOUT progress the pill turns into a clickable
 // refresh prompt; a reload restarts the preload fetch, which is the
