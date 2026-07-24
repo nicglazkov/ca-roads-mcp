@@ -1047,19 +1047,29 @@ if ('serviceWorker' in navigator) {
 }
 
 ensureMap();
-fetch('/api/stats').then(r => r.json()).then(s => {
-  const put = (id, v) => {
-    const el = document.getElementById(id);
-    if (el && typeof v === 'number') el.textContent = v.toLocaleString();
-  };
-  put('k-inc', s.incidents); put('k-clo', s.closures);
-  put('k-cc', s.chain_controls); put('k-wf', s.wildfires);
-  put('k-cam', s.cameras); put('k-st', s.states);
-  if (s.sources && s.states) {
-    document.getElementById('feedsok').textContent =
-      'live from ' + s.sources + ' sources · ' + s.states + ' states';
-  }
-}).catch(() => {});
+// The KPI strip re-polls while a fresh server instance is still warming
+// its state feeds, so the headline numbers climb to the real nationwide
+// totals instead of freezing on whatever was cached at page load.
+(function pollStats(attempt) {
+  fetch('/api/stats').then(r => r.json()).then(s => {
+    const put = (id, v) => {
+      const el = document.getElementById(id);
+      if (el && typeof v === 'number') el.textContent = v.toLocaleString();
+    };
+    put('k-inc', s.incidents); put('k-clo', s.closures);
+    put('k-cc', s.chain_controls); put('k-wf', s.wildfires);
+    put('k-cam', s.cameras); put('k-st', s.states);
+    if (s.sources && s.states) {
+      document.getElementById('feedsok').textContent =
+        'live from ' + s.sources + ' sources · ' + s.states + ' states' +
+        (s.warm_total && s.warm_ready < s.warm_total
+          ? ' · warming ' + s.warm_ready + '/' + s.warm_total : '');
+    }
+    if (s.warm_total && s.warm_ready < s.warm_total && attempt < 40) {
+      setTimeout(() => pollStats(attempt + 1), 8000);
+    }
+  }).catch(() => {});
+})(0);
 
 fetch('/health').then(r => r.json()).then(d => {
   if (d.version) document.getElementById('ver').textContent = ' · v' + d.version;
@@ -2004,20 +2014,54 @@ function mapLoadingDone() {
   if (!mapDataShown) {
     mapDataShown = true;
     mapLoadingEl.classList.remove('clickable');
+    // Data made it: a refresh prompt shown during a slow first
+    // response is obsolete and must not suppress later pill text.
+    mapRefreshPrompt = false;
   }
   hidePill();
 }
-// After 5 seconds the pill turns into a clickable refresh prompt; a
-// reload restarts the preload fetch, which is the fastest recovery
-// when the first request got a bad instance.
+// After 5 seconds WITHOUT progress the pill turns into a clickable
+// refresh prompt; a reload restarts the preload fetch, which is the
+// fastest recovery when the first request got a bad instance. While
+// bytes are arriving or the server is reporting warm-up progress the
+// prompt stays away: reloading a page that is visibly working only
+// restarts the wait.
 let mapRefreshPrompt = false;
-setTimeout(() => {
-  if (mapDataShown) return;
-  mapRefreshPrompt = true;
-  mapLoadingText.textContent = 'Still loading? Try refreshing the page';
-  mapLoadingEl.classList.add('clickable');
-  mapLoadingEl.addEventListener('click', () => location.reload());
-}, 5000);
+let lastLoadProgress = Date.now();
+(function armRefreshPrompt() {
+  setTimeout(() => {
+    if (mapDataShown) return;
+    if (Date.now() - lastLoadProgress < 4500) { armRefreshPrompt(); return; }
+    mapRefreshPrompt = true;
+    mapLoadingText.textContent = 'Still loading? Try refreshing the page';
+    mapLoadingEl.classList.add('clickable');
+    mapLoadingEl.addEventListener('click', () => location.reload());
+  }, 5000);
+})();
+// Warm-up loop: a fresh server instance answers the boot request with
+// whatever feeds are already cached plus X-Warm-Ready/Total counters;
+// the page keeps re-polling (and showing "X of Y") until every state
+// feed has reported in.
+let warmReady = -1, warmTotal = 0, warmTimer = null, warmPill = false;
+let warmPolls = 0;
+let bootBytes = false;
+// Before the first map response has produced a single byte there is no
+// download percentage to show, so poll the instant warm-up endpoint:
+// its climbing "X of Y feeds" counter is real progress (it also keeps
+// the refresh prompt away while the server is visibly working).
+(function pollWarmup(n) {
+  if (mapDataShown || bootBytes || n > 40) return;
+  fetch('/api/warmup').then(r => r.json()).then(w => {
+    if (mapDataShown || bootBytes || !w.total) return;
+    if (w.ready > warmReady) lastLoadProgress = Date.now();
+    warmReady = w.ready; warmTotal = w.total;
+    if (!mapRefreshPrompt && w.ready < w.total) {
+      showPill('Starting up: ' + w.ready + ' of ' + w.total +
+        ' feeds ready…');
+    }
+    if (w.ready < w.total) setTimeout(() => pollWarmup(n + 1), 1500);
+  }).catch(() => {});
+})(0);
 
 async function refreshAmbient(force) {
   const view = map.getBounds();
@@ -2029,7 +2073,11 @@ async function refreshAmbient(force) {
   // before Leaflet even loads), and the containment check above then
   // holds for every pan and zoom a user can make. Dots never require
   // re-querying; data refreshes on the interval timer instead.
-  const first = ambientBounds === null;
+  // Warm-up re-polls keep fetching the whole-world box: each one
+  // replaces the marker registry, and shrinking it to the viewport
+  // mid-warm-up would throw away every out-of-view state just loaded.
+  const first = ambientBounds === null
+    || (warmTotal > 0 && warmReady < warmTotal);
   const fetchBounds = first
     ? L.latLngBounds([[-85.0, -180.0], [85.0, 180.0]])
     : view.pad(0.35);
@@ -2043,6 +2091,11 @@ async function refreshAmbient(force) {
         kinds + '&slim=1');
       if (mine !== ambientCycle) return true;
       if (!res.ok) return false;
+      if (isFast) {
+        warmTotal = +res.headers.get('X-Warm-Total') || 0;
+        warmReady = +res.headers.get('X-Warm-Ready') || 0;
+        lastLoadProgress = Date.now();
+      }
       let data;
       if (isFast && !mapDataShown && res.body) {
         // Byte-true progress: X-Raw-Length is the decompressed size,
@@ -2057,6 +2110,8 @@ async function refreshAmbient(force) {
           if (done) break;
           chunks.push(value);
           received += value.length;
+          bootBytes = true;
+          lastLoadProgress = Date.now();
           if (total && !mapDataShown && !mapRefreshPrompt) {
             showPill('Downloading live reports ' +
               Math.min(99, Math.round(100 * received / total)) + '%');
@@ -2083,6 +2138,21 @@ async function refreshAmbient(force) {
     load('camera,sign,rwis', HEAVY_GROUPS, false),
   ]);
   if (mine !== ambientCycle) return;
+  if (fastOk && warmTotal) {
+    if (warmReady < warmTotal && warmPolls < 36) {
+      warmPolls += 1;
+      if (!mapRefreshPrompt) {
+        showPill('Loading state feeds: ' + warmReady + ' of ' +
+          warmTotal + '…');
+        warmPill = true;
+      }
+      clearTimeout(warmTimer);
+      warmTimer = setTimeout(() => refreshAmbient(true), 5000);
+    } else if (warmPill) {
+      warmPill = false;
+      hidePill();
+    }
+  }
   if (fastOk && heavyOk) {
     ambientBounds = fetchBounds;
     mapRetryDelay = 4000;

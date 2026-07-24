@@ -888,8 +888,17 @@ async def api_mapdata(request: Request):
 
     # Out-of-state expansion feeds ride along only when the viewport
     # actually touches those states, so California browsing pays nothing.
+    # While a fresh instance is still warming its feed caches, the fetch
+    # gets a short budget: serve whatever answered, let the rest keep
+    # loading in the background, and tell the client so it re-polls
+    # instead of staring at a 30-second first response.
+    ready0, total0 = states.warm_progress()
     with contextlib.suppress(Exception):  # expansion states never break CA
-        markers.extend(await states.markers_for_bbox(road.client, box, want))
+        markers.extend(await states.markers_for_bbox(
+            road.client, box, want,
+            budget_seconds=2.5 if ready0 < total0 else None))
+    warm_ready, warm_total = states.warm_progress()
+    warming = warm_ready < warm_total
 
     # Closures whose feeds publish endpoints but no geometry get their
     # cached road-snapped shape attached (and unknown pairs queued for
@@ -932,7 +941,7 @@ async def api_mapdata(request: Request):
     cache_key = (request.query_params.get("bbox") or "",
                  request.query_params.get("kinds") or "", slim, geo_only)
     now_mono = time.monotonic()
-    hit = _MAPDATA_CACHE.get(cache_key)
+    hit = None if warming else _MAPDATA_CACHE.get(cache_key)
     if hit and now_mono - hit[0] < _MAPDATA_CACHE_TTL:
         _ts, etag, raw_len, gz_body, raw_body = hit
     else:
@@ -943,14 +952,21 @@ async def api_mapdata(request: Request):
         raw_body, gz_body = await asyncio.to_thread(_build, markers)
         etag = f'"{_hashlib.md5(raw_body).hexdigest()}"'
         raw_len = len(raw_body)
-        _MAPDATA_CACHE[cache_key] = (now_mono, etag, raw_len, gz_body,
-                                     raw_body)
-        while len(_MAPDATA_CACHE) > _MAPDATA_CACHE_MAX:
-            _MAPDATA_CACHE.pop(next(iter(_MAPDATA_CACHE)))
+        # A partial warming response must never be cached or reused:
+        # the very next poll should see more feeds, not this snapshot.
+        if not warming:
+            _MAPDATA_CACHE[cache_key] = (now_mono, etag, raw_len, gz_body,
+                                         raw_body)
+            while len(_MAPDATA_CACHE) > _MAPDATA_CACHE_MAX:
+                _MAPDATA_CACHE.pop(next(iter(_MAPDATA_CACHE)))
 
-    common = {"ETag": etag, "Cache-Control": "public, max-age=30",
+    common = {"ETag": etag,
+              "Cache-Control": ("no-store" if warming
+                                else "public, max-age=30"),
               "Vary": "Accept-Encoding",
-              "X-Raw-Length": str(raw_len)}
+              "X-Raw-Length": str(raw_len),
+              "X-Warm-Ready": str(warm_ready),
+              "X-Warm-Total": str(warm_total)}
     inm = request.headers.get("if-none-match") or ""
     if etag in inm:
         return Response(status_code=304, headers=common)
@@ -1049,6 +1065,15 @@ async def api_incident(request: Request):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
+async def warmup(request: Request):
+    """Feed-cache warm-up progress, answered instantly (no upstream
+    awaits): the page polls this while the first map response is still
+    in flight so a cold instance shows real progress, not a dead pill."""
+    ready, total = states.warm_progress()
+    return JSONResponse({"ready": ready, "total": total},
+                        headers={"Cache-Control": "no-store"})
+
+
 async def stats(request: Request):
     """Statewide counts for the header KPI strip. Every feed involved is
     TTL-cached, so this is cheap after the first hit."""
@@ -1061,6 +1086,7 @@ async def stats(request: Request):
     # the whole product, not just California.
     extra = states.stat_counts()
     cov = states.coverage_summary()
+    warm_ready, warm_total = states.warm_progress()
     return JSONResponse({
         "incidents": len(chp.records) + extra["incident"],
         "closures": len(lcs.records) + extra["lane_closure"],
@@ -1068,6 +1094,9 @@ async def stats(request: Request):
         "wildfires": len(wf.records) + extra["wildfire"],
         "cameras": len(cams.records) + extra["camera"],
         "sources": cov["sources"], "states": cov["states"],
+        # Below-total ready means a fresh instance is still warming
+        # feed caches; the page re-polls until the counts are final.
+        "warm_ready": warm_ready, "warm_total": warm_total,
     })
 
 
@@ -1261,6 +1290,7 @@ app = Starlette(
         Route("/api/ask", ask, methods=["POST"]),
         Route("/api/event", track, methods=["POST"]),
         Route("/api/stats", stats, methods=["GET"]),
+        Route("/api/warmup", warmup, methods=["GET"]),
         Route("/api/geocode", api_geocode, methods=["GET"]),
         Route("/api/suggest", api_suggest, methods=["GET"]),
         Route("/api/flow", api_flow, methods=["GET"]),
@@ -1577,7 +1607,8 @@ app = RateLimitMiddleware(
     # legitimately calls them on every pan - throttling them starves
     # address validation behind map browsing.
     exempt_prefixes=("/static/", "/logo.svg", "/health", "/favicon",
-                     "/api/mapdata", "/api/stats", "/api/geocode",
+                     "/api/mapdata", "/api/stats", "/api/warmup",
+                     "/api/geocode",
                      "/api/incident/", "/api/sources", "/api/stcam/",
                      "/api/suggest", "/api/flow", "/api/traffictile",
                      # Watch pages + public bootstrap config are as cheap
