@@ -1651,6 +1651,23 @@ const GL = { on: false, deck: null, dirty: false, index: [],
     };
     fit();
     pane.appendChild(cv);
+    // Animated zooms (wheel, double-click, +/- buttons) move the tiles
+    // with a CSS transition and fire no per-frame events, so without
+    // this the dots would sit still and snap at zoomend. Mirror
+    // L.Canvas._updateTransform: give the pane the same transition
+    // class and the same target transform as the tiles, so the browser
+    // animates both in lockstep; the zoomend redraw then lands exactly
+    // where the transition ends. (_getNewPixelOrigin is the private
+    // helper L.Canvas itself uses; Leaflet is vendored, so it is
+    // version-pinned.)
+    pane.classList.add('leaflet-zoom-animated');
+    map.on('zoomanim', (e) => {
+      const scale = map.getZoomScale(e.zoom, map.getZoom());
+      const offset = map.getSize().multiplyBy(-0.5 * scale)
+        .add(map.project(map.getCenter(), e.zoom))
+        .subtract(map._getNewPixelOrigin(e.center, e.zoom));
+      L.DomUtil.setTransform(pane, offset, scale);
+    });
     const sc = document.createElement('script');
     sc.src = '/static/vendor/deck-slim.min.js';
     sc.onload = () => {
