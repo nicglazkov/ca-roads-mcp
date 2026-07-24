@@ -2134,9 +2134,20 @@ def _clean_marker_text(m: dict) -> None:
                 m[f] = v2
 
 
-async def markers_for_bbox(client, box, want) -> list[dict]:
+# Lookups that outlive a budgeted request keep running here so their
+# results still land in the cache for the next poll.
+_PENDING_LOOKUPS: set = set()
+
+
+async def markers_for_bbox(client, box, want,
+                           budget_seconds: float | None = None) -> list[dict]:
     """All out-of-state markers intersecting the viewport. Never raises:
-    a failing state simply contributes nothing this cycle."""
+    a failing state simply contributes nothing this cycle.
+
+    With ``budget_seconds`` set, feeds that cannot answer inside the
+    budget are dropped from THIS response but keep fetching in the
+    background, so a cold instance serves whatever is ready instead of
+    blocking the first page load on fifty upstream fetches."""
     lat_min, lon_min, lat_max, lon_max = box
     out: list[dict] = []
     # Honor the same kinds filter the California feeds do.
@@ -2191,16 +2202,42 @@ async def markers_for_bbox(client, box, want) -> list[dict]:
                 f"toll:{code}", ttl, MAX_SERVE, lambda f=fetcher: f(client)))
     # A nationwide viewport touches every state at once; fetch them
     # concurrently so cold latency is the slowest feed, not the sum.
-    for outcome in await asyncio.gather(*lookups, return_exceptions=True):
-        if not isinstance(outcome, BaseException):
-            await add(outcome)
+    if budget_seconds is None:
+        for outcome in await asyncio.gather(*lookups, return_exceptions=True):
+            if not isinstance(outcome, BaseException):
+                await add(outcome)
+        return out
+    tasks = [asyncio.ensure_future(lu) for lu in lookups]
+    done, pending = await asyncio.wait(tasks, timeout=budget_seconds)
+    for t in pending:
+        _PENDING_LOOKUPS.add(t)
+        t.add_done_callback(_PENDING_LOOKUPS.discard)
+    for t in done:
+        try:
+            await add(t.result())
+        except Exception:  # noqa: BLE001 - a failed feed contributes nothing
+            continue
     return out
+
+
+# Once the boot prewarm has finished, warm-up is over even if some
+# feeds failed (a dead upstream must not keep the page polling forever).
+_PREWARM_DONE = False
 
 
 async def prewarm(client) -> None:
     """Warm every expansion-state cache at boot (called in the background
     from the demo's prewarm), so the first nationwide map request lands
     on hot caches. Failures are fine; the request path retries."""
+    global _PREWARM_DONE
+    try:
+        with contextlib.suppress(Exception):
+            await _prewarm_all(client)
+    finally:
+        _PREWARM_DONE = True
+
+
+async def _prewarm_all(client) -> None:
     with contextlib.suppress(Exception):
         lookups = [
             _cache.get(f"nec:{c}", TTL, MAX_SERVE,
@@ -2251,6 +2288,31 @@ def _status_entry(key: str, name: str, agency: str, state: str) -> dict:
             "count": len(entry.value["markers"]),
             "as_of": entry.fetched_at.isoformat()} if entry else {}),
     }
+
+
+def _expected_keys() -> list[str]:
+    """Cache keys the boot path depends on (camera bundles excluded:
+    they load in the heavy phase and never gate first paint)."""
+    keys = [f"nec:{c}" for c in NEC_STATES]
+    keys += [f"wzdx:{c}" for c in WZDX_FEEDS if not _wzdx_superseded(c)]
+    keys += [f"{c}:all" for c in KEYLESS_STATES]
+    keys += [f"{c}:all" for c, (_n, _b, _f, ready) in KEYED_STATES.items()
+             if ready()]
+    keys += [f"toll:{c}" for c, (_s, _b, _f, ready, _t)
+             in TOLL_SOURCES.items() if not ready or ready()]
+    return keys
+
+
+def warm_progress() -> tuple[int, int]:
+    """(feeds cached, feeds expected): lets the page show real warm-up
+    progress on a fresh instance instead of an unexplained wait. Once
+    the boot prewarm finishes, warm-up is reported complete even if
+    some feeds failed: their absence is an outage, not a wait."""
+    keys = _expected_keys()
+    if _PREWARM_DONE:
+        return len(keys), len(keys)
+    ready = sum(1 for k in keys if k in _cache._entries)  # noqa: SLF001
+    return ready, len(keys)
 
 
 def stat_counts() -> dict:
