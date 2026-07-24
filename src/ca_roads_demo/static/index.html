@@ -1620,19 +1620,37 @@ const GL = { on: false, deck: null, dirty: false, index: [],
     const probe = document.createElement('canvas');
     if (!probe.getContext('webgl2')) return;
     GL.on = true;
+    // The canvas must live inside a Leaflet pane: the map pane is a
+    // CSS stacking context (it gets a transform while panning), so a
+    // sibling canvas can only sit above or below ALL panes at once.
+    // A pane at z 450 keeps dots over closure strips (400) and under
+    // popups (700). The pane is pinned to the viewport every frame
+    // because deck.gl already redraws in screen space.
+    const pane = map.createPane('glpane');
+    pane.style.zIndex = 450;
+    pane.style.pointerEvents = 'none';
     const cv = document.createElement('canvas');
     cv.id = 'glcanvas';
     cv.style.cssText = 'position:absolute;inset:0;width:100%;' +
-      'height:100%;z-index:450;pointer-events:none';
-    map.getContainer().appendChild(cv);
+      'height:100%;pointer-events:none';
+    const fit = () => {
+      const s = map.getSize();
+      pane.style.width = s.x + 'px';
+      pane.style.height = s.y + 'px';
+      L.DomUtil.setPosition(pane, map.containerPointToLayerPoint([0, 0]));
+    };
+    fit();
+    pane.appendChild(cv);
     const sc = document.createElement('script');
     sc.src = '/static/vendor/deck-slim.min.js';
     sc.onload = () => {
       GL.deck = new deckSlim.Deck({
         canvas: 'glcanvas', controller: false,
         viewState: GL.view(), layers: [] });
-      map.on('move zoom zoomend resize', () =>
-        GL.deck.setProps({ viewState: GL.view() }));
+      map.on('move zoom zoomend resize', () => {
+        fit();
+        GL.deck.setProps({ viewState: GL.view() });
+      });
       if (GL.dirty) GL.rebuild();
       GL.readyResolvers.forEach((r) => r());
       GL.readyResolvers = [];
